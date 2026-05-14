@@ -1,0 +1,11 @@
+{
+  "videos": [
+    {
+      "id": "bird-001",
+      "species": "Yellow-headed Caracara",
+      "description": "Yellow-headed Caracara (Daptrius chimachima) calling.",
+      "file": "videos/yellow-headed-caracara.mp4",
+      "thumbnail": "thumbnails/yellow-headed-caracara.png"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "videos": [
+    {
+      "id": "v001",
+      "species": "American Robin",
+      "file": "videos/v001.mp4",
+      "thumbnail": "thumbnails/v001.jpg",
+      "description": "The American Robin is one of the most familiar birds in North America. Its cheerful song — a series of liquid whistles — is often the first birdsong heard in the morning."
+    },
+    {
+      "id": "v002",
+      "species": "Northern Cardinal",
+      "file": "videos/v002.mp4",
+      "thumbnail": "thumbnails/v002.jpg",
+      "description": "The brilliant red plumage of the male Northern Cardinal is unmistakable. Both sexes sing loud, clear whistles that can be heard year-round, even in winter."
+    },
+    {
+      "id": "v003",
+      "species": "Black-capped Chickadee",
+      "file": "videos/v003.mp4",
+      "thumbnail": "thumbnails/v003.jpg",
+      "description": "Named for its distinctive 'chick-a-dee-dee-dee' call, this tiny, acrobatic bird adds more 'dees' when predators are near — a natural alarm system."
+    }
+  ]
+}

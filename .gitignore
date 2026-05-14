@@ -32,6 +32,14 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+
+# Lambda build output
+backend/functions/*/dist/
+backend/functions/*/node_modules/
+
+# SAM build artifacts
+backend/.aws-sam/
 
 # typescript
 *.tsbuildinfo

@@ -1,59 +1,99 @@
-import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
+/**
+ * Root layout — entry point of the app.
+ *
+ * IMPORTANT: The background task import MUST come first so TaskManager
+ * registers the task when the JS bundle loads in headless (background) mode.
+ */
+import '../tasks/backgroundDownload';
+
 import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { Platform } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
+import * as BackgroundTask from 'expo-background-task';
+import { BACKGROUND_DOWNLOAD_TASK } from '../constants/tasks';
 
-import { useColorScheme } from '@/components/useColorScheme';
-
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
+export { ErrorBoundary } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-    ...FontAwesome.font,
+// Configure how notifications appear while the app is in the foreground (native only)
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
   });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
-
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
-  if (!loaded) {
-    return null;
-  }
-
-  return <RootLayoutNav />;
 }
 
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+/**
+ * Handles notification taps → navigation. Extracted into its own component so
+ * that useLastNotificationResponse() is always called unconditionally within it,
+ * while the component itself is omitted on web where the API is unavailable.
+ */
+function NotificationHandler() {
+  const router = useRouter();
+  const lastResponse = Notifications.useLastNotificationResponse();
+  useEffect(() => {
+    if (!lastResponse) return;
+    const data = lastResponse.notification.request.content.data as
+      | Record<string, string>
+      | undefined;
+    if (data?.url === '/video-player') {
+      router.push('/video-player');
+    }
+  }, [lastResponse]);
+  return null;
+}
+
+export default function RootLayout() {
+  // Register background download task once on mount (native only)
+  useEffect(() => {
+    SplashScreen.hideAsync();
+
+    if (Platform.OS !== 'web') {
+      BackgroundTask.registerTaskAsync(BACKGROUND_DOWNLOAD_TASK, {
+        minimumInterval: 60 * 60, // At most once per hour
+      }).catch((err) => {
+        // Safe to ignore "already registered" errors
+        console.log('[BackgroundTask] Registration note:', err.message);
+      });
+    }
+  }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
+    <>
+      <StatusBar style="light" />
+      {Platform.OS !== 'web' && <NotificationHandler />}
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: '#0a1628' },
+          headerTintColor: '#ffffff',
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: '#0a1628' },
+        }}
+      >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+        <Stack.Screen
+          name="video-player"
+          options={{
+            title: '',
+            presentation: 'fullScreenModal',
+            headerStyle: { backgroundColor: '#000000' },
+            headerTintColor: '#ffffff',
+          }}
+        />
+        <Stack.Screen name="+not-found" />
       </Stack>
-    </ThemeProvider>
+    </>
   );
 }

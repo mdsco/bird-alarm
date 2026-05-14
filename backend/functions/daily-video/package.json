@@ -1,0 +1,20 @@
+{
+  "name": "daily-video",
+  "version": "1.0.0",
+  "description": "Lambda function returning the daily bird video for a device",
+  "main": "dist/handler.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/lib-dynamodb": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.140",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  }
+}

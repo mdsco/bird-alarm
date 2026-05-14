@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "bird-alarm",
+    "name": "Bird Alarm",
     "slug": "bird-alarm",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,18 +11,32 @@
     "splash": {
       "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1a1a2e"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.birdalarm.app",
+      "infoPlist": {
+        "UIBackgroundModes": ["processing", "fetch"],
+        "BGTaskSchedulerPermittedIdentifiers": [
+          "com.expo.modules.backgroundtask.processing"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1a1a2e"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.birdalarm.app",
+      "permissions": [
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK",
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -30,7 +44,16 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-video",
+      "expo-background-task",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "sounds": []
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

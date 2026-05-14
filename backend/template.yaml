@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Bird Alarm - daily video API
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: '1'
+
+Parameters:
+  StageName:
+    Type: String
+    Default: prod
+
+  S3BucketName:
+    Type: String
+    Description: Name of the S3 bucket containing bird videos and the manifest
+
+  DynamoDBTableName:
+    Type: String
+    Default: bird-alarm-history
+    Description: DynamoDB table name for device watch history
+
+  CloudFrontBaseUrl:
+    Type: String
+    Description: "CloudFront distribution URL (no trailing slash), e.g. https://d1234abcd.cloudfront.net"
+
+  LocalStackEndpoint:
+    Type: String
+    Default: ""
+    Description: "LocalStack endpoint for local development (e.g. http://172.17.0.1:4566). Leave empty in production."
+
+Resources:
+
+  # ── DynamoDB table ──────────────────────────────────────────────────────────
+  HistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref DynamoDBTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: device_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: device_id
+          KeyType: HASH
+
+  # ── Lambda function ─────────────────────────────────────────────────────────
+  DailyVideoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: bird-alarm-daily-video
+      Handler: dist/handler.handler
+      CodeUri: functions/daily-video/
+      Description: Returns the daily bird video URL for a given device
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref S3BucketName
+          CLOUDFRONT_BASE_URL: !Ref CloudFrontBaseUrl
+          DYNAMODB_TABLE: !Ref DynamoDBTableName
+          LOCALSTACK_ENDPOINT: !Ref LocalStackEndpoint
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref S3BucketName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref HistoryTable
+      Events:
+        GetDailyVideo:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref BirdAlarmApi
+            Path: /daily-video
+            Method: GET
+
+  # ── API Gateway (HTTP API — lower cost than REST API) ───────────────────────
+  BirdAlarmApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref StageName
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${BirdAlarmApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}"
+
+  DailyVideoEndpoint:
+    Description: Full endpoint for the daily video (add ?device_id=<uuid>)
+    Value: !Sub "https://${BirdAlarmApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}/daily-video"
+
+  DynamoDBTable:
+    Description: DynamoDB table name
+    Value: !Ref HistoryTable
