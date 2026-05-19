@@ -64,7 +64,10 @@ export function VideoPlayerView({ uri, autoPlay = true, onPlaybackEnd, onSleep }
         {onSleep ? (
           <TouchableOpacity
             style={styles.controlButton}
-            onPress={onSleep}
+            onPress={() => {
+              player.pause();
+              onSleep();
+            }}
             accessibilityLabel="Sleep 10 minutes"
           >
             <Ionicons name="moon" size={32} color="#ffffff" />

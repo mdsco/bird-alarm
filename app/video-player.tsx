@@ -15,6 +15,7 @@ import { VideoPlayerView } from '../components/VideoPlayerView';
 import { DailyVideoMetadata } from '../constants/types';
 
 const SLEEP_MINUTES = 10;
+const SNOOZE_DISMISS_DELAY_MS = 1500;
 const FEEDBACK_DURATION_MS = 3000;
 
 type State =
@@ -36,15 +37,16 @@ export default function VideoPlayerScreen() {
   }, []);
 
   const handleSleep = useCallback(async () => {
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     try {
       await scheduleSnooze(SLEEP_MINUTES * 60 * 1000);
       setSleepFeedback(`Snoozed — back in ${SLEEP_MINUTES} minutes`);
+      feedbackTimeoutRef.current = setTimeout(() => router.back(), SNOOZE_DISMISS_DELAY_MS);
     } catch (err) {
       setSleepFeedback(err instanceof Error ? err.message : 'Failed to snooze');
+      feedbackTimeoutRef.current = setTimeout(() => setSleepFeedback(null), FEEDBACK_DURATION_MS);
     }
-    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
-    feedbackTimeoutRef.current = setTimeout(() => setSleepFeedback(null), FEEDBACK_DURATION_MS);
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     let cancelled = false;
