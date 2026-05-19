@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDailyVideo, addToVideoLibrary, getTodayDateString } from '../services/storage';
 import { isVideoCached, downloadVideo, getLocalVideoPath } from '../services/downloader';
 import { VideoPlayerView } from '../components/VideoPlayerView';
@@ -123,7 +124,7 @@ export default function VideoPlayerScreen() {
 
   // state.phase === 'ready'
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <VideoPlayerView
         uri={state.uri}
         autoPlay
@@ -132,7 +133,7 @@ export default function VideoPlayerScreen() {
       <View style={styles.overlay}>
         <Text style={styles.speciesText}>{state.video.species}</Text>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

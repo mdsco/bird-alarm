@@ -10,15 +10,36 @@ A React Native app that wakes you up with a daily bird video.
 - Docker (for LocalStack)
 - [LocalStack](https://localstack.cloud/) running on port 4566
 - `awslocal` CLI (`pip install awscli-local`)
-- AWS SAM CLI (`pip install aws-sam-cli`)
+- AWS SAM CLI — install via the [official installer](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html) rather than pip to avoid boto3 dependency conflicts
 
 ### Frontend
 
-Copy `.env.example` to `.env` and point it at the local SAM API:
+Copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_URL` to point at the local SAM API:
 
-```
-EXPO_PUBLIC_API_URL=http://localhost:3000
-```
+- **Browser testing:** use `localhost`
+  ```
+  EXPO_PUBLIC_API_URL=http://localhost:3000
+  ```
+
+- **Physical device via WiFi:** use your laptop's LAN IP address instead — `localhost` on the phone refers to the phone itself, not your laptop. Find your LAN IP from the SAM startup output (`Running on http://<LAN-IP>:3000`) or with `ip addr`.
+  ```
+  EXPO_PUBLIC_API_URL=http://<your-laptop-LAN-IP>:3000
+  ```
+  > **Note:** Some networks (public WiFi, corporate, university) enable AP isolation, which blocks device-to-device traffic. If the phone times out connecting to the laptop, use USB tethering instead (see below).
+
+- **Physical device via USB tethering (recommended):** avoids WiFi AP isolation and gives a stable IP that doesn't change between sessions.
+  1. Connect the phone to the laptop via USB
+  2. On Android: **Settings → Network & Internet → Hotspot & Tethering → USB tethering** (toggle on)
+  3. Find the new interface IP on the laptop: `ip addr show` — look for a new interface (e.g. `enp0s20f0u5...`) with a `10.x.x.x` address
+  4. Set `EXPO_PUBLIC_API_URL` to that IP:
+     ```
+     EXPO_PUBLIC_API_URL=http://<usb-tethering-ip>:3000
+     ```
+
+> **Important:** `EXPO_PUBLIC_*` variables are bundled at Metro start time. After changing `.env`, restart Expo with `--reset-cache`:
+> ```bash
+> npm start -- --reset-cache
+> ```
 
 Start the Expo dev server:
 
@@ -96,24 +117,33 @@ npm run build
 cd ../..
 ```
 
-#### 5. Start the local API with SAM
+#### 5. Open port 3000 in the firewall (Linux only)
 
-Run from the `backend/` directory:
+Required for physical device testing. On Fedora/RHEL with `firewalld`:
 
 ```bash
-AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test sam local start-api \ 
+sudo firewall-cmd --add-port=3000/tcp --zone=public
+```
+
+#### 6. Start the local API with SAM
+
+Run from the `backend/` directory. `--host 0.0.0.0` is required when testing on a physical device so SAM accepts connections from your local network.
+
+```bash
+AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test sam local start-api \
   -t template.yaml \
   --host 0.0.0.0 \
-  --parameter-overrides \ 
-  "S3BucketName=bird-alarm-local \
+  --parameter-overrides \
+    "S3BucketName=bird-alarm-local \
      CloudFrontBaseUrl=http://localhost:4566/bird-alarm-local \
      LocalStackEndpoint=http://172.17.0.1:4566"
 ```
 
+> **Note:** `172.17.0.1` is the Docker bridge gateway IP on Linux — this lets the Lambda container reach LocalStack on the host. On Mac, use `host.docker.internal` instead.
 
-> **Note:** `172.17.0.1` is the Docker bridge gateway IP on Linux — this lets the Lambda container (running in Docker) reach LocalStack on the host. On Mac, use `host.docker.internal` instead.
+> **Note:** `LocalStackEndpoint` is passed as a SAM template parameter rather than via `--env-vars`, because SAM strips `AWS_ENDPOINT_URL` from the Lambda container environment. The Lambda code reads `LOCALSTACK_ENDPOINT` and passes it explicitly to the AWS SDK clients.
 
-The API will be available at `http://localhost:3000`.
+The API will be available at `http://localhost:3000` (or `http://<LAN-IP>:3000` for device access).
 
 #### Verify the API is working
 
@@ -124,19 +154,20 @@ curl "http://localhost:3000/daily-video?device_id=00000000-0000-0000-0000-000000
 ### Local Architecture
 
 ```
-Browser / Expo Go
+Browser / Expo Go / Dev Build
       │
       ▼
-Expo dev server (localhost:8081)
+Expo dev server (port 8081)
       │  EXPO_PUBLIC_API_URL
+      │  (localhost:3000 for browser, <LAN-IP>:3000 for device)
       ▼
-SAM local API (localhost:3000)
+SAM local API (0.0.0.0:3000)
       │
       ▼
 Lambda container (Docker)
       │
-      ├──► LocalStack S3 (172.17.0.1:4566)   — reads videos.json manifest
-      └──► LocalStack DynamoDB (172.17.0.1:4566) — reads/writes device history
+      ├──► LocalStack S3 (172.17.0.1:4566)       — reads videos.json manifest
+      └──► LocalStack DynamoDB (172.17.0.1:4566)  — reads/writes device history
 ```
 
 ### Web Limitations

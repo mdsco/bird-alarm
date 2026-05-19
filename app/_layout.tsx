@@ -7,8 +7,9 @@
 import '../tasks/backgroundDownload';
 
 import { useEffect } from 'react';
-import { Platform } from 'react-native';
+import { AppState, DeviceEventEmitter, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import { BirdAlarmModule } from '../modules/BirdAlarmModule';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
@@ -23,26 +24,36 @@ export const unstable_settings = {
 
 SplashScreen.preventAutoHideAsync();
 
-// Configure how notifications appear while the app is in the foreground (native only)
+// Configure how notifications appear while the app is in the foreground (native only).
+// We suppress the banner because the notification received listener navigates directly
+// to the video player — no tap required when the app is open.
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldShowBanner: true,
+      shouldShowBanner: false,
       shouldShowList: true,
-      shouldPlaySound: true,
+      shouldPlaySound: false,
       shouldSetBadge: false,
     }),
   });
 }
 
 /**
- * Handles notification taps → navigation. Extracted into its own component so
- * that useLastNotificationResponse() is always called unconditionally within it,
- * while the component itself is omitted on web where the API is unavailable.
+ * Handles alarm → video navigation. Extracted into its own component so that
+ * the Notifications hooks are always called unconditionally within it, while
+ * the component itself is omitted on web where the API is unavailable.
+ *
+ * Two paths:
+ *  - Foreground: addNotificationReceivedListener fires immediately when the
+ *    alarm triggers while the app is open → navigate directly, no tap needed.
+ *  - Background / killed: OS shows the notification; user taps it →
+ *    useLastNotificationResponse fires → navigate to video player.
  */
 function NotificationHandler() {
   const router = useRouter();
   const lastResponse = Notifications.useLastNotificationResponse();
+
+  // Background / killed app: open video player on notification tap
   useEffect(() => {
     if (!lastResponse) return;
     const data = lastResponse.notification.request.content.data as
@@ -52,6 +63,48 @@ function NotificationHandler() {
       router.push('/video-player');
     }
   }, [lastResponse]);
+
+  // iOS foreground: open video player immediately when alarm fires (no tap required)
+  useEffect(() => {
+    if (Platform.OS === 'android') return;
+    const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as Record<string, string> | undefined;
+      if (data?.url === '/video-player') {
+        router.push('/video-player');
+      }
+    });
+    return () => subscription.remove();
+  }, [router]);
+
+  // Android: native AlarmManager fires → open video player
+  useEffect(() => {
+    if (Platform.OS !== 'android' || !BirdAlarmModule) return;
+
+    // Check if the alarm fired before JS was ready (app launch or background→foreground)
+    BirdAlarmModule.checkAlarmFired().then((fired) => {
+      if (fired) router.push('/video-player');
+    });
+
+    // Immediate event when the alarm fires while the app is in the foreground
+    const alarmSub = DeviceEventEmitter.addListener('BirdAlarmFired', () => {
+      router.push('/video-player');
+    });
+
+    // When the app returns to the foreground after a background alarm notification tap
+    const appStateSub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        BirdAlarmModule!.checkAlarmFired().then((fired) => {
+          if (fired) router.push('/video-player');
+        });
+      }
+    });
+
+    return () => {
+      alarmSub.remove();
+      appStateSub.remove();
+    };
+  }, [router]);
+
   return null;
 }
 

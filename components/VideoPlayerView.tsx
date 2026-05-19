@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 
 interface VideoPlayerViewProps {
@@ -11,6 +11,7 @@ interface VideoPlayerViewProps {
 export function VideoPlayerView({ uri, autoPlay = true, onPlaybackEnd }: VideoPlayerViewProps) {
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
+    p.audioMixingMode = 'doNotMix'; // Activates AVAudioSessionCategoryPlayback on iOS so audio plays
     if (autoPlay) p.play();
   });
 

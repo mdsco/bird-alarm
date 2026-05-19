@@ -7,6 +7,22 @@ const CF_BASE_URL = process.env.CLOUDFRONT_BASE_URL ?? '';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Dev-only: rewrite host-loopback URLs using the request's Host header so a
+// device on the LAN gets a URL pointing at the dev machine, not at "localhost"
+// (which on Android resolves to the device itself). No-op in production where
+// CLOUDFRONT_BASE_URL points at a real CloudFront distribution.
+function resolveCfBaseUrl(event: APIGatewayProxyEventV2): string {
+  const hostHeader = event.headers?.host ?? event.headers?.Host ?? '';
+  const requestHost = hostHeader.split(':')[0];
+  if (!requestHost || requestHost === 'localhost' || requestHost === '127.0.0.1') {
+    return CF_BASE_URL;
+  }
+  return CF_BASE_URL
+    .replace('__REQUEST_HOST__', requestHost)
+    .replace('://localhost', `://${requestHost}`)
+    .replace('://127.0.0.1', `://${requestHost}`);
+}
+
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
 }
@@ -43,6 +59,7 @@ export const handler = async (
       getDeviceHistory(deviceId),
     ]);
 
+    const cfBaseUrl = resolveCfBaseUrl(event);
     const today = todayDateString();
 
     // If the device already received a video today, return the same one (idempotent)
@@ -53,8 +70,8 @@ export const handler = async (
         if (video) {
           const response: DailyVideoResponse = {
             videoId: video.id,
-            videoUrl: `${CF_BASE_URL}/${video.file}`,
-            thumbnailUrl: `${CF_BASE_URL}/${video.thumbnail}`,
+            videoUrl: `${cfBaseUrl}/${video.file}`,
+            thumbnailUrl: `${cfBaseUrl}/${video.thumbnail}`,
             species: video.species,
             description: video.description,
           };
@@ -81,8 +98,8 @@ export const handler = async (
     // ── Return response ─────────────────────────────────────────────────────
     const response: DailyVideoResponse = {
       videoId: chosen.id,
-      videoUrl: `${CF_BASE_URL}/${chosen.file}`,
-      thumbnailUrl: `${CF_BASE_URL}/${chosen.thumbnail}`,
+      videoUrl: `${cfBaseUrl}/${chosen.file}`,
+      thumbnailUrl: `${cfBaseUrl}/${chosen.thumbnail}`,
       species: chosen.species,
       description: chosen.description,
     };
