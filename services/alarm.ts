@@ -4,6 +4,7 @@ import { AlarmTime } from '../constants/types';
 import { BirdAlarmModule } from '../modules/BirdAlarmModule';
 
 const ALARM_NOTIFICATION_ID = 'bird-alarm-daily';
+const SNOOZE_NOTIFICATION_ID = 'bird-alarm-snooze';
 
 /**
  * Request notification permissions. Returns true if granted.
@@ -63,6 +64,43 @@ export async function cancelAlarm(): Promise<void> {
     await BirdAlarmModule.cancelAlarm();
   } else {
     await Notifications.cancelScheduledNotificationAsync(ALARM_NOTIFICATION_ID);
+  }
+}
+
+/**
+ * Schedule a one-shot snooze that fires delayMs from now. Independent of the
+ * daily alarm — the user's recurring wake-up time is preserved.
+ */
+export async function scheduleSnooze(delayMs: number): Promise<void> {
+  await cancelSnooze();
+
+  if (Platform.OS === 'android' && BirdAlarmModule) {
+    await BirdAlarmModule.scheduleSnooze(delayMs);
+  } else {
+    await Notifications.scheduleNotificationAsync({
+      identifier: SNOOZE_NOTIFICATION_ID,
+      content: {
+        title: 'Bird Alarm',
+        body: `Good morning! Today’s bird is ready \u{1F426}`,
+        data: { url: '/video-player' },
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: Math.max(1, Math.round(delayMs / 1000)),
+      },
+    });
+  }
+}
+
+/**
+ * Cancel a pending snooze, if any. Does not affect the daily alarm.
+ */
+export async function cancelSnooze(): Promise<void> {
+  if (Platform.OS === 'android' && BirdAlarmModule) {
+    await BirdAlarmModule.cancelSnooze();
+  } else {
+    await Notifications.cancelScheduledNotificationAsync(SNOOZE_NOTIFICATION_ID);
   }
 }
 

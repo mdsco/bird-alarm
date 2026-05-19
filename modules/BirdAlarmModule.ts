@@ -9,6 +9,9 @@ const { BirdAlarm } = NativeModules;
 export const BirdAlarmModule: {
   scheduleAlarm(hour: number, minute: number): Promise<void>;
   cancelAlarm(): Promise<void>;
+  /** Schedule a one-shot snooze delayMs in the future. Does not affect the daily alarm. */
+  scheduleSnooze(delayMs: number): Promise<void>;
+  cancelSnooze(): Promise<void>;
   /** Returns true (once) if the alarm fired since the last check. Clears the flag. */
   checkAlarmFired(): Promise<boolean>;
   /** False on Android 14+ when USE_FULL_SCREEN_INTENT has not been granted by the user. */
@@ -17,6 +20,8 @@ export const BirdAlarmModule: {
   ? {
       scheduleAlarm: (hour, minute) => BirdAlarm.scheduleAlarm(hour, minute),
       cancelAlarm: () => BirdAlarm.cancelAlarm(),
+      scheduleSnooze: (delayMs) => BirdAlarm.scheduleSnooze(delayMs),
+      cancelSnooze: () => BirdAlarm.cancelSnooze(),
       checkAlarmFired: () => BirdAlarm.checkAlarmFired(),
       canUseFullScreenIntent: () => BirdAlarm.canUseFullScreenIntent(),
     }

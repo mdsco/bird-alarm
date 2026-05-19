@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,12 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { getDailyVideo, addToVideoLibrary, getTodayDateString } from '../services/storage';
 import { isVideoCached, downloadVideo, getLocalVideoPath } from '../services/downloader';
+import { scheduleSnooze } from '../services/alarm';
 import { VideoPlayerView } from '../components/VideoPlayerView';
 import { DailyVideoMetadata } from '../constants/types';
+
+const SLEEP_MINUTES = 10;
+const FEEDBACK_DURATION_MS = 3000;
 
 type State =
   | { phase: 'loading' }
@@ -22,6 +26,25 @@ type State =
 export default function VideoPlayerScreen() {
   const router = useRouter();
   const [state, setState] = useState<State>({ phase: 'loading' });
+  const [sleepFeedback, setSleepFeedback] = useState<string | null>(null);
+  const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+    };
+  }, []);
+
+  const handleSleep = useCallback(async () => {
+    try {
+      await scheduleSnooze(SLEEP_MINUTES * 60 * 1000);
+      setSleepFeedback(`Snoozed — back in ${SLEEP_MINUTES} minutes`);
+    } catch (err) {
+      setSleepFeedback(err instanceof Error ? err.message : 'Failed to snooze');
+    }
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+    feedbackTimeoutRef.current = setTimeout(() => setSleepFeedback(null), FEEDBACK_DURATION_MS);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,10 +152,16 @@ export default function VideoPlayerScreen() {
         uri={state.uri}
         autoPlay
         onPlaybackEnd={handlePlaybackEnd}
+        onSleep={handleSleep}
       />
       <View style={styles.overlay}>
         <Text style={styles.speciesText}>{state.video.species}</Text>
       </View>
+      {sleepFeedback ? (
+        <View style={styles.feedbackContainer} pointerEvents="none">
+          <Text style={styles.feedbackText}>{sleepFeedback}</Text>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -204,5 +233,22 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.8)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  feedbackContainer: {
+    position: 'absolute',
+    top: 80,
+    left: 24,
+    right: 24,
+    alignItems: 'center',
+  },
+  feedbackText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '500',
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    overflow: 'hidden',
   },
 });
