@@ -6,6 +6,7 @@ export const STORAGE_KEYS = {
   LAST_FETCH_DATE: 'last_fetch_date', // 'YYYY-MM-DD'
   VIDEO_LIBRARY: 'video_library',    // VideoLibraryEntry[] JSON
   PALETTE: 'palette',                // PaletteKey string
+  ALARMS: 'alarms',                  // Alarm[] JSON (multi-alarm)
 } as const;
 
 // SecureStore keys (device-level, persists across reinstalls on iOS)

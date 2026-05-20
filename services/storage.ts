@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { STORAGE_KEYS, SECURE_KEYS } from '../constants/storage-keys';
-import { AlarmTime, DailyVideoMetadata, VideoLibraryEntry } from '../constants/types';
+import { Alarm, AlarmTime, DailyVideoMetadata, VideoLibraryEntry } from '../constants/types';
+import { from24h } from '../utils/nextAlarm';
 
 // ─── SecureStore (device UUID) ───────────────────────────────────────────────
 // SecureStore is native-only; fall back to AsyncStorage on web.
@@ -88,4 +89,39 @@ export async function addToVideoLibrary(entry: VideoLibraryEntry): Promise<void>
     library.unshift(entry); // Newest first
     await AsyncStorage.setItem(STORAGE_KEYS.VIDEO_LIBRARY, JSON.stringify(library));
   }
+}
+
+// ─── Alarms (multi-alarm) ────────────────────────────────────────────────────
+
+/**
+ * Read all alarms from storage. If the alarms key is missing, migrate any
+ * legacy single-alarm state (ALARM_TIME + ALARM_ENABLED) into an Alarm[].
+ */
+export async function getAlarms(): Promise<Alarm[]> {
+  const raw = await AsyncStorage.getItem(STORAGE_KEYS.ALARMS);
+  if (raw) return JSON.parse(raw);
+
+  // First-run migration: convert old single-alarm storage into one Alarm.
+  const legacyTime = await getAlarmTime();
+  const legacyEnabled = await getAlarmEnabled();
+  const migrated: Alarm[] = legacyTime
+    ? [
+        {
+          id: 'migrated-1',
+          ...from24h(legacyTime.hour),
+          minute: legacyTime.minute,
+          label: 'Wake up',
+          repeat: [1, 2, 3, 4, 5],
+          icon: 'songbird',
+          sound: 'Skylark',
+          on: legacyEnabled,
+        },
+      ]
+    : [];
+  await setAlarms(migrated);
+  return migrated;
+}
+
+export async function setAlarms(alarms: Alarm[]): Promise<void> {
+  await AsyncStorage.setItem(STORAGE_KEYS.ALARMS, JSON.stringify(alarms));
 }

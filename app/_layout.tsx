@@ -53,6 +53,16 @@ if (Platform.OS !== 'web') {
  *  - Background / killed: OS shows the notification; user taps it →
  *    useLastNotificationResponse fires → navigate to video player.
  */
+/** Ignore notification responses older than this — prevents a stale tap from
+ * a previous session re-opening the video player on every launch. */
+const STALE_NOTIFICATION_MS = 5 * 60 * 1000;
+
+function isFresh(firedAt: unknown): boolean {
+  const ts = typeof firedAt === 'number' ? firedAt : Number(firedAt);
+  if (!Number.isFinite(ts) || ts <= 0) return false;
+  return Date.now() - ts < STALE_NOTIFICATION_MS;
+}
+
 function NotificationHandler() {
   const router = useRouter();
   const lastResponse = Notifications.useLastNotificationResponse();
@@ -61,9 +71,11 @@ function NotificationHandler() {
   useEffect(() => {
     if (!lastResponse) return;
     const data = lastResponse.notification.request.content.data as
-      | Record<string, string>
+      | { url?: string; firedAt?: number | string }
       | undefined;
-    if (data?.url === '/video-player') {
+    // Only navigate if the tapped notification fired recently. Past taps are
+    // replayed by useLastNotificationResponse on every cold-start otherwise.
+    if (data?.url === '/video-player' && isFresh(data.firedAt)) {
       router.push('/video-player');
     }
   }, [lastResponse]);
@@ -72,8 +84,10 @@ function NotificationHandler() {
   useEffect(() => {
     if (Platform.OS === 'android') return;
     const subscription = Notifications.addNotificationReceivedListener((notification) => {
-      const data = notification.request.content.data as Record<string, string> | undefined;
-      if (data?.url === '/video-player') {
+      const data = notification.request.content.data as
+        | { url?: string; firedAt?: number | string }
+        | undefined;
+      if (data?.url === '/video-player' && isFresh(data.firedAt)) {
         router.push('/video-player');
       }
     });
