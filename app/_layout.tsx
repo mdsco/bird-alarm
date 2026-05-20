@@ -5,9 +5,11 @@
  * registers the task when the JS bundle loads in headless (background) mode.
  */
 import '../tasks/backgroundDownload';
+import 'react-native-gesture-handler';
 
 import { useEffect } from 'react';
 import { AppState, DeviceEventEmitter, Platform } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useRouter } from 'expo-router';
 import { BirdAlarmModule } from '../modules/BirdAlarmModule';
 import { StatusBar } from 'expo-status-bar';
@@ -15,6 +17,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import * as BackgroundTask from 'expo-background-task';
 import { BACKGROUND_DOWNLOAD_TASK } from '../constants/tasks';
+import { ThemeProvider } from '../theme/ThemeContext';
+import { useAppFonts } from '../theme/fonts';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -109,10 +113,10 @@ function NotificationHandler() {
 }
 
 export default function RootLayout() {
+  const fontsLoaded = useAppFonts();
+
   // Register background download task once on mount (native only)
   useEffect(() => {
-    SplashScreen.hideAsync();
-
     if (Platform.OS !== 'web') {
       BackgroundTask.registerTaskAsync(BACKGROUND_DOWNLOAD_TASK, {
         minimumInterval: 60 * 60, // At most once per hour
@@ -123,30 +127,37 @@ export default function RootLayout() {
     }
   }, []);
 
+  // Keep the splash screen up until fonts are ready, so the first paint uses Fraunces/Inter/Mono.
+  useEffect(() => {
+    if (fontsLoaded) SplashScreen.hideAsync();
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) return null;
+
   return (
-    <>
-      <StatusBar style="light" />
-      {Platform.OS !== 'web' && <NotificationHandler />}
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: '#0a1628' },
-          headerTintColor: '#ffffff',
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: '#0a1628' },
-        }}
-      >
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="video-player"
-          options={{
-            title: '',
-            presentation: 'fullScreenModal',
-            headerStyle: { backgroundColor: '#000000' },
-            headerTintColor: '#ffffff',
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider>
+        <StatusBar style="dark" />
+        {Platform.OS !== 'web' && <NotificationHandler />}
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: 'transparent' },
           }}
-        />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-    </>
+        >
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="video-player"
+            options={{
+              title: '',
+              presentation: 'fullScreenModal',
+              headerStyle: { backgroundColor: '#000000' },
+              headerTintColor: '#ffffff',
+            }}
+          />
+          <Stack.Screen name="+not-found" />
+        </Stack>
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
