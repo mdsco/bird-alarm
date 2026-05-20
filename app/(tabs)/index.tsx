@@ -1,219 +1,259 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Switch,
-  Alert,
   ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
-import { useDeviceId } from '../../hooks/useDeviceId';
-import { useDailyVideo } from '../../hooks/useDailyVideo';
-import { useAlarm } from '../../hooks/useAlarm';
-import { BirdCard } from '../../components/BirdCard';
-import { AlarmTimePicker } from '../../components/AlarmTimePicker';
-import { AlarmTime } from '../../constants/types';
-import { formatAlarmTime } from '../../services/alarm';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useAlarms } from '../../hooks/useAlarms';
+import { usePalette } from '../../theme/ThemeContext';
+import { FONTS } from '../../theme/fonts';
+import { AlarmCard } from '../../components/AlarmCard';
+import { FeatherMark, FlyingBirdMark, PlusIcon } from '../../components/icons/BirdIcons';
+import { greeting, formatHeaderDate } from '../../utils/greeting';
+import { computeNextAlarm, formatInterval } from '../../utils/nextAlarm';
+import { Alarm } from '../../constants/types';
 
-export default function HomeScreen() {
-  const router = useRouter();
-  const { deviceId, isLoading: isLoadingDevice } = useDeviceId();
-  const { video, isLoading: isLoadingVideo, isDownloading, downloadProgress, error, triggerDownload } =
-    useDailyVideo(deviceId);
-  const { alarmTime, alarmEnabled, isLoading: isLoadingAlarm, setAlarm, toggleAlarm } = useAlarm(
-    video?.species,
-  );
+function makeDefaultAlarm(): Alarm {
+  return {
+    id: `${Date.now()}`,
+    hour: 7,
+    minute: 0,
+    ampm: 'AM',
+    label: 'Wake up',
+    repeat: [1, 2, 3, 4, 5],
+    icon: 'songbird',
+    sound: 'Skylark',
+    on: true,
+  };
+}
 
-  const isLoading = isLoadingDevice || isLoadingVideo || isLoadingAlarm;
+export default function AlarmListScreen() {
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
+  const { alarms, isLoading, addAlarm, deleteAlarm, toggleAlarm } = useAlarms();
+  const [now, setNow] = useState(() => new Date());
 
-  const handleSetAlarm = async (time: AlarmTime) => {
+  // Tick the "next chime" line every 30s so the countdown stays accurate.
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const next = useMemo(() => computeNextAlarm(alarms, now), [alarms, now]);
+
+  const handleAdd = async () => {
     try {
-      await setAlarm(time);
+      await addAlarm(makeDefaultAlarm());
     } catch (err) {
-      Alert.alert('Permission Required', err instanceof Error ? err.message : 'Failed to set alarm');
+      Alert.alert('Cannot add alarm', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
-  const handleToggleAlarm = async () => {
+  const handleToggle = async (id: string) => {
     try {
-      await toggleAlarm();
+      await toggleAlarm(id);
     } catch (err) {
-      Alert.alert('Error', err instanceof Error ? err.message : 'Failed to toggle alarm');
+      Alert.alert('Cannot toggle alarm', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#1a6dbb" size="large" />
-        <Text style={styles.loadingText}>Loading your daily bird...</Text>
-      </View>
+  // Card tap is a placeholder until the Edit screen lands in Phase 4. For now
+  // we offer a Delete action so users can clean up alarms from this screen.
+  const handleCardPress = (alarm: Alarm) => {
+    Alert.alert(
+      `${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')} ${alarm.ampm}`,
+      alarm.label,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteAlarm(alarm.id).catch(() => {}),
+        },
+      ],
     );
-  }
-
-  if (error) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorEmoji}>⚠️</Text>
-        <Text style={styles.errorTitle}>Could not load today's bird</Text>
-        <Text style={styles.errorText}>{error}</Text>
-        <Text style={styles.errorHint}>Make sure EXPO_PUBLIC_API_URL is set in your .env file.</Text>
-      </View>
-    );
-  }
+  };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.greeting}>Good morning</Text>
-      <Text style={styles.subtitle}>Your bird alarm awaits</Text>
+    <View style={[styles.root, { backgroundColor: palette.bg }]}>
+      <LinearGradient
+        colors={palette.bgGradient}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
 
-      {/* Alarm toggle + current time display */}
-      <View style={styles.alarmCard}>
-        <View style={styles.alarmHeader}>
-          <View>
-            <Text style={styles.alarmLabel}>Daily Alarm</Text>
-            {alarmTime ? (
-              <Text style={styles.alarmTime}>{formatAlarmTime(alarmTime)}</Text>
-            ) : (
-              <Text style={styles.alarmTimePlaceholder}>Not set</Text>
-            )}
-          </View>
-          <Switch
-            value={alarmEnabled}
-            onValueChange={handleToggleAlarm}
-            trackColor={{ false: '#1e3a5f', true: '#1a6dbb' }}
-            thumbColor="#ffffff"
-            disabled={!alarmTime}
-          />
-        </View>
+      {/* Decorative sun glow top-right */}
+      <View
+        pointerEvents="none"
+        style={[
+          styles.sunGlow,
+          {
+            top: insets.top + 30,
+            backgroundColor: palette.sunGlow,
+            shadowColor: palette.warm,
+          },
+        ]}
+      />
 
-        <AlarmTimePicker currentTime={alarmTime} onSave={handleSetAlarm} />
+      {/* Decorative flying birds top-right */}
+      <View pointerEvents="none" style={[styles.bird1, { top: insets.top + 80 }]}>
+        <FlyingBirdMark color={palette.text} />
+      </View>
+      <View pointerEvents="none" style={[styles.bird2, { top: insets.top + 108 }]}>
+        <FlyingBirdMark color={palette.text} small />
+      </View>
+      <View pointerEvents="none" style={[styles.bird3, { top: insets.top + 102 }]}>
+        <FlyingBirdMark color={palette.text} small />
       </View>
 
-      {/* Today's bird card */}
-      {video ? (
-        <BirdCard
-          video={video}
-          isDownloading={isDownloading}
-          downloadProgress={downloadProgress}
-          onDownload={triggerDownload}
-          onPlay={() => router.push('/video-player')}
-        />
-      ) : (
-        <View style={styles.noVideoCard}>
-          <Text style={styles.noVideoText}>No video available yet. Check back soon!</Text>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 120 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header block */}
+        <View style={styles.headerMeta}>
+          <FeatherMark color={palette.accent} size={12} />
+          <Text style={[styles.headerMetaText, { color: palette.sub }]}>
+            {formatHeaderDate(now)}
+          </Text>
         </View>
-      )}
+        <Text style={[styles.greeting, { color: palette.text }]}>{greeting(now)}</Text>
+        <Text style={[styles.subline, { color: palette.sub }]}>
+          {next ? (
+            <>
+              Next chime in{' '}
+              <Text style={{ color: palette.text, fontFamily: FONTS.bodySemibold }}>
+                {formatInterval(next.msUntil)}
+              </Text>{' '}
+              · {next.alarm.label}
+            </>
+          ) : alarms.length === 0 ? (
+            'No alarms yet. Tap + to add one.'
+          ) : (
+            'No alarms enabled. Rest easy.'
+          )}
+        </Text>
 
-      <Text style={styles.footerNote}>
-        Videos download automatically overnight. Tap "Download Video" if you want it now.
-      </Text>
-    </ScrollView>
+        {/* Alarm cards */}
+        <View style={styles.cardStack}>
+          {isLoading ? (
+            <ActivityIndicator color={palette.accent} />
+          ) : alarms.length === 0 ? (
+            <View
+              style={[
+                styles.emptyCard,
+                { backgroundColor: palette.surface, borderColor: palette.border },
+              ]}
+            >
+              <Text style={[styles.emptyText, { color: palette.sub }]}>
+                Tap + to set your first alarm
+              </Text>
+            </View>
+          ) : (
+            alarms.map((a) => (
+              <AlarmCard
+                key={a.id}
+                alarm={a}
+                onToggle={() => handleToggle(a.id)}
+                onPress={() => handleCardPress(a)}
+              />
+            ))
+          )}
+        </View>
+      </ScrollView>
+
+      {/* FAB */}
+      <Pressable
+        onPress={handleAdd}
+        style={({ pressed }) => [
+          styles.fab,
+          {
+            right: 22,
+            bottom: insets.bottom + 24,
+            shadowColor: palette.accent,
+            opacity: pressed ? 0.9 : 1,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={[palette.warm, palette.accent]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.fabGradient}
+        >
+          <PlusIcon color="#fff" size={22} />
+        </LinearGradient>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a1628',
+  root: { flex: 1, position: 'relative' },
+  scrollContent: {
+    paddingHorizontal: 22,
   },
-  content: {
-    padding: 20,
-    paddingBottom: 40,
+  sunGlow: {
+    position: 'absolute',
+    right: -40,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    opacity: 0.55,
+    shadowOpacity: 0.6,
+    shadowRadius: 40,
   },
-  centered: {
+  bird1: { position: 'absolute', right: 40, opacity: 0.55 },
+  bird2: { position: 'absolute', right: 88, opacity: 0.35 },
+  bird3: { position: 'absolute', right: 18, opacity: 0.3 },
+  headerMeta: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerMetaText: {
+    fontSize: 11,
+    fontFamily: FONTS.monoMedium,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  greeting: {
+    fontSize: 42,
+    fontFamily: FONTS.serif,
+    letterSpacing: -0.8,
+    lineHeight: 50,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  subline: { fontSize: 14, lineHeight: 21, fontFamily: FONTS.body },
+  cardStack: { marginTop: 28, gap: 14 },
+  emptyCard: {
+    padding: 28,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  emptyText: { fontSize: 14, fontFamily: FONTS.body, textAlign: 'center' },
+  fab: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    overflow: 'hidden',
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 14,
+    elevation: 10,
+  },
+  fabGradient: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    gap: 12,
-  },
-  loadingText: {
-    color: '#8ab4d4',
-    fontSize: 16,
-    marginTop: 12,
-  },
-  errorEmoji: {
-    fontSize: 48,
-  },
-  errorTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  errorText: {
-    color: '#e07070',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  errorHint: {
-    color: '#4a7aa0',
-    fontSize: 12,
-    textAlign: 'center',
-  },
-  greeting: {
-    color: '#8ab4d4',
-    fontSize: 16,
-    fontWeight: '400',
-    marginBottom: 2,
-  },
-  subtitle: {
-    color: '#ffffff',
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 24,
-  },
-  alarmCard: {
-    backgroundColor: '#1e3a5f',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 8,
-  },
-  alarmHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  alarmLabel: {
-    color: '#8ab4d4',
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  alarmTime: {
-    color: '#ffffff',
-    fontSize: 36,
-    fontWeight: '200',
-    fontVariant: ['tabular-nums'],
-  },
-  alarmTimePlaceholder: {
-    color: '#4a7aa0',
-    fontSize: 22,
-    fontWeight: '300',
-  },
-  noVideoCard: {
-    backgroundColor: '#1e3a5f',
-    borderRadius: 20,
-    padding: 32,
-    alignItems: 'center',
-    marginVertical: 12,
-  },
-  noVideoText: {
-    color: '#8ab4d4',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  footerNote: {
-    color: '#4a7aa0',
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 16,
-    lineHeight: 18,
   },
 });

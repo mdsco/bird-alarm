@@ -10,6 +10,7 @@ import 'react-native-gesture-handler';
 import { useEffect } from 'react';
 import { AppState, DeviceEventEmitter, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { BirdAlarmModule } from '../modules/BirdAlarmModule';
 import { StatusBar } from 'expo-status-bar';
@@ -150,28 +151,30 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider>
-        <StatusBar style="dark" />
-        {Platform.OS !== 'web' && <NotificationHandler />}
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: 'transparent' },
-          }}
-        >
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="video-player"
-            options={{
-              title: '',
-              presentation: 'fullScreenModal',
-              headerStyle: { backgroundColor: '#000000' },
-              headerTintColor: '#ffffff',
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <StatusBar style="dark" />
+          {Platform.OS !== 'web' && <NotificationHandler />}
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: 'transparent' },
             }}
-          />
-          <Stack.Screen name="+not-found" />
-        </Stack>
-      </ThemeProvider>
+          >
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="video-player"
+              options={{
+                title: '',
+                presentation: 'fullScreenModal',
+                headerStyle: { backgroundColor: '#000000' },
+                headerTintColor: '#ffffff',
+              }}
+            />
+            <Stack.Screen name="+not-found" />
+          </Stack>
+        </ThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

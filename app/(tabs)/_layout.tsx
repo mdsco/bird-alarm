@@ -1,40 +1,44 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
-
-function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
-  return (
-    <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>
-  );
-}
+import { usePalette } from '../../theme/ThemeContext';
+import { FONTS } from '../../theme/fonts';
+import { BirdIcon } from '../../components/icons/BirdIcons';
 
 export default function TabLayout() {
+  const palette = usePalette();
+
   return (
     <Tabs
       screenOptions={{
         tabBarStyle: {
-          backgroundColor: '#0a1628',
-          borderTopColor: '#1e3a5f',
+          backgroundColor: palette.surface,
+          borderTopColor: palette.border,
         },
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: '#4a7aa0',
-        headerStyle: { backgroundColor: '#0a1628' },
-        headerTintColor: '#ffffff',
-        headerShadowVisible: false,
+        tabBarActiveTintColor: palette.accent,
+        tabBarInactiveTintColor: palette.sub,
+        tabBarLabelStyle: {
+          fontFamily: FONTS.bodyMedium,
+          fontSize: 11,
+        },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Alarm',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="⏰" focused={focused} />,
+          title: 'Alarms',
+          tabBarIcon: ({ color, focused }) => (
+            <BirdIcon name="songbird" color={color} size={focused ? 22 : 20} />
+          ),
         }}
       />
       <Tabs.Screen
         name="library"
         options={{
           title: 'Library',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🐦" focused={focused} />,
+          tabBarIcon: ({ color, focused }) => (
+            <BirdIcon name="dove" color={color} size={focused ? 22 : 20} />
+          ),
         }}
       />
     </Tabs>
