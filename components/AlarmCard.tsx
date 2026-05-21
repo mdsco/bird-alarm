@@ -1,5 +1,5 @@
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Alarm } from '../constants/types';
 import { usePalette } from '../theme/ThemeContext';
@@ -14,13 +14,28 @@ type Props = {
   alarm: Alarm;
   onToggle: () => void;
   onPress?: () => void;
+  /** Index in the visible list. Used to stagger the mount animation. */
+  index?: number;
 };
 
-export function AlarmCard({ alarm, onToggle, onPress }: Props) {
+export function AlarmCard({ alarm, onToggle, onPress, index = 0 }: Props) {
   const palette = usePalette();
   const repeatStr = formatRepeat(alarm.repeat);
 
+  // Fade + slight upward slide on mount, staggered by index so the list cascades in.
+  const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(enter, {
+      toValue: 1,
+      duration: 380,
+      delay: 80 + index * 60,
+      useNativeDriver: true,
+    }).start();
+  }, [enter, index]);
+  const translateY = enter.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
+
   return (
+    <Animated.View style={{ opacity: enter, transform: [{ translateY }] }}>
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
@@ -90,6 +105,7 @@ export function AlarmCard({ alarm, onToggle, onPress }: Props) {
         })}
       </View>
     </Pressable>
+    </Animated.View>
   );
 }
 

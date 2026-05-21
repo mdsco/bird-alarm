@@ -15,7 +15,9 @@ import { useAlarms } from '../../hooks/useAlarms';
 import { usePalette } from '../../theme/ThemeContext';
 import { FONTS } from '../../theme/fonts';
 import { AlarmCard } from '../../components/AlarmCard';
+import { FadeIn } from '../../components/FadeIn';
 import { FeatherMark, FlyingBirdMark, PlusIcon } from '../../components/icons/BirdIcons';
+import { PaletteSwitcher } from '../../components/PaletteSwitcher';
 import { greeting, formatHeaderDate } from '../../utils/greeting';
 import { computeNextAlarm, formatInterval } from '../../utils/nextAlarm';
 import { Alarm } from '../../constants/types';
@@ -90,28 +92,34 @@ export default function AlarmListScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* Header block */}
-        <View style={styles.headerMeta}>
-          <FeatherMark color={palette.accent} size={12} />
-          <Text style={[styles.headerMetaText, { color: palette.sub }]}>
-            {formatHeaderDate(now)}
+        <FadeIn>
+          <View style={styles.headerMeta}>
+            <FeatherMark color={palette.accent} size={12} />
+            <Text style={[styles.headerMetaText, { color: palette.sub }]}>
+              {formatHeaderDate(now)}
+            </Text>
+          </View>
+          <Text style={[styles.greeting, { color: palette.text }]}>{greeting(now)}</Text>
+          <Text style={[styles.subline, { color: palette.sub }]}>
+            {next ? (
+              <>
+                Next chime in{' '}
+                <Text style={{ color: palette.text, fontFamily: FONTS.bodySemibold }}>
+                  {formatInterval(next.msUntil)}
+                </Text>{' '}
+                · {next.alarm.label}
+              </>
+            ) : alarms.length === 0 ? (
+              'No alarms yet. Tap + to add one.'
+            ) : (
+              'No alarms enabled. Rest easy.'
+            )}
           </Text>
-        </View>
-        <Text style={[styles.greeting, { color: palette.text }]}>{greeting(now)}</Text>
-        <Text style={[styles.subline, { color: palette.sub }]}>
-          {next ? (
-            <>
-              Next chime in{' '}
-              <Text style={{ color: palette.text, fontFamily: FONTS.bodySemibold }}>
-                {formatInterval(next.msUntil)}
-              </Text>{' '}
-              · {next.alarm.label}
-            </>
-          ) : alarms.length === 0 ? (
-            'No alarms yet. Tap + to add one.'
-          ) : (
-            'No alarms enabled. Rest easy.'
-          )}
-        </Text>
+
+          <View style={styles.paletteRow}>
+            <PaletteSwitcher />
+          </View>
+        </FadeIn>
 
         {/* Alarm cards */}
         <View style={styles.cardStack}>
@@ -129,10 +137,11 @@ export default function AlarmListScreen() {
               </Text>
             </View>
           ) : (
-            alarms.map((a) => (
+            alarms.map((a, i) => (
               <AlarmCard
                 key={a.id}
                 alarm={a}
+                index={i}
                 onToggle={() => handleToggle(a.id)}
                 onPress={() => handleCardPress(a)}
               />
@@ -201,7 +210,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   subline: { fontSize: 14, lineHeight: 21, fontFamily: FONTS.body },
-  cardStack: { marginTop: 28, gap: 14 },
+  paletteRow: { marginTop: 18, alignSelf: 'flex-start' },
+  cardStack: { marginTop: 20, gap: 14 },
   emptyCard: {
     padding: 28,
     borderRadius: 24,

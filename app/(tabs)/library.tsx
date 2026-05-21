@@ -16,6 +16,7 @@ import { VideoLibraryEntry } from '../../constants/types';
 import { usePalette } from '../../theme/ThemeContext';
 import { FONTS } from '../../theme/fonts';
 import { FeatherMark } from '../../components/icons/BirdIcons';
+import { FadeIn } from '../../components/FadeIn';
 import { formatWatchedDate } from '../../utils/greeting';
 
 export default function LibraryScreen() {
@@ -67,7 +68,7 @@ export default function LibraryScreen() {
   };
 
   const header = (
-    <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
+    <FadeIn style={[styles.header, { paddingTop: insets.top + 24 }]}>
       <View style={styles.metaRow}>
         <FeatherMark color={palette.accent} size={12} />
         <Text style={[styles.metaText, { color: palette.sub }]}>
@@ -80,7 +81,7 @@ export default function LibraryScreen() {
           ? 'Tap an alarm to start your collection.'
           : 'Tap a card to revisit one.'}
       </Text>
-    </View>
+    </FadeIn>
   );
 
   return (
