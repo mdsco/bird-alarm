@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { useAlarms } from '../../hooks/useAlarms';
 import { usePalette } from '../../theme/ThemeContext';
 import { FONTS } from '../../theme/fonts';
@@ -19,24 +20,11 @@ import { greeting, formatHeaderDate } from '../../utils/greeting';
 import { computeNextAlarm, formatInterval } from '../../utils/nextAlarm';
 import { Alarm } from '../../constants/types';
 
-function makeDefaultAlarm(): Alarm {
-  return {
-    id: `${Date.now()}`,
-    hour: 7,
-    minute: 0,
-    ampm: 'AM',
-    label: 'Wake up',
-    repeat: [1, 2, 3, 4, 5],
-    icon: 'songbird',
-    sound: 'Skylark',
-    on: true,
-  };
-}
-
 export default function AlarmListScreen() {
   const palette = usePalette();
   const insets = useSafeAreaInsets();
-  const { alarms, isLoading, addAlarm, deleteAlarm, toggleAlarm } = useAlarms();
+  const router = useRouter();
+  const { alarms, isLoading, toggleAlarm } = useAlarms();
   const [now, setNow] = useState(() => new Date());
 
   // Tick the "next chime" line every 30s so the countdown stays accurate.
@@ -47,13 +35,7 @@ export default function AlarmListScreen() {
 
   const next = useMemo(() => computeNextAlarm(alarms, now), [alarms, now]);
 
-  const handleAdd = async () => {
-    try {
-      await addAlarm(makeDefaultAlarm());
-    } catch (err) {
-      Alert.alert('Cannot add alarm', err instanceof Error ? err.message : 'Unknown error');
-    }
-  };
+  const handleAdd = () => router.push('/edit-alarm');
 
   const handleToggle = async (id: string) => {
     try {
@@ -63,21 +45,8 @@ export default function AlarmListScreen() {
     }
   };
 
-  // Card tap is a placeholder until the Edit screen lands in Phase 4. For now
-  // we offer a Delete action so users can clean up alarms from this screen.
   const handleCardPress = (alarm: Alarm) => {
-    Alert.alert(
-      `${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')} ${alarm.ampm}`,
-      alarm.label,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => deleteAlarm(alarm.id).catch(() => {}),
-        },
-      ],
-    );
+    router.push({ pathname: '/edit-alarm', params: { alarmId: alarm.id } });
   };
 
   return (

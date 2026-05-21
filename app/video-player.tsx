@@ -1,34 +1,83 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
   ActivityIndicator,
-  TouchableOpacity,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { getDailyVideo, addToVideoLibrary, getTodayDateString } from '../services/storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
+import { StatusBar } from 'expo-status-bar';
+import {
+  getAlarms,
+  getDailyVideo,
+  addToVideoLibrary,
+  getTodayDateString,
+} from '../services/storage';
 import { isVideoCached, downloadVideo, getLocalVideoPath } from '../services/downloader';
-import { scheduleSnooze } from '../services/alarm';
+import { scheduleSnooze } from '../services/alarms';
 import { VideoPlayerView } from '../components/VideoPlayerView';
-import { DailyVideoMetadata } from '../constants/types';
+import { PulsingDot } from '../components/PulsingDot';
+import { usePalette } from '../theme/ThemeContext';
+import { FONTS } from '../theme/fonts';
+import { Alarm, DailyVideoMetadata } from '../constants/types';
+import { to24h } from '../utils/nextAlarm';
 
-const SLEEP_MINUTES = 10;
+const SNOOZE_MINUTES = 9;
 const SNOOZE_DISMISS_DELAY_MS = 1500;
 const FEEDBACK_DURATION_MS = 3000;
+const RECENT_ALARM_WINDOW_MS = 10 * 60 * 1000; // 10 min
 
-type State =
+type LoadState =
   | { phase: 'loading' }
   | { phase: 'downloading'; progress: number }
   | { phase: 'ready'; video: DailyVideoMetadata; uri: string }
   | { phase: 'error'; message: string };
 
+/** Most-recently-fired alarm in the last 10 minutes, if any. */
+function findRecentAlarm(alarms: Alarm[], now: Date): Alarm | null {
+  let best: { alarm: Alarm; firedAt: number } | null = null;
+  for (const a of alarms) {
+    if (!a.on) continue;
+    const h24 = to24h(a.hour, a.ampm);
+    const t = new Date(now);
+    t.setHours(h24, a.minute, 0, 0);
+    let firedAt = t.getTime();
+    if (firedAt > now.getTime()) firedAt -= 24 * 60 * 60 * 1000;
+    const age = now.getTime() - firedAt;
+    if (age < 0 || age > RECENT_ALARM_WINDOW_MS) continue;
+    if (a.repeat.length > 0) {
+      const dow = new Date(firedAt).getDay();
+      if (!a.repeat.includes(dow as 0 | 1 | 2 | 3 | 4 | 5 | 6)) continue;
+    }
+    if (!best || firedAt > best.firedAt) best = { alarm: a, firedAt };
+  }
+  return best?.alarm ?? null;
+}
+
+function timeOfDayGreeting(d: Date): string {
+  const h = d.getHours();
+  if (h < 5) return 'Pre-dawn chorus';
+  if (h < 12) return 'The lark is calling';
+  if (h < 17) return 'Afternoon flight';
+  if (h < 21) return 'Evening roost';
+  return 'Night birds singing';
+}
+
 export default function VideoPlayerScreen() {
   const router = useRouter();
-  const [state, setState] = useState<State>({ phase: 'loading' });
-  const [sleepFeedback, setSleepFeedback] = useState<string | null>(null);
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
+
+  const [state, setState] = useState<LoadState>({ phase: 'loading' });
+  const [firingAlarm, setFiringAlarm] = useState<Alarm | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
     return () => {
@@ -36,21 +85,21 @@ export default function VideoPlayerScreen() {
     };
   }, []);
 
-  const handleSleep = useCallback(async () => {
-    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
-    try {
-      await scheduleSnooze(SLEEP_MINUTES * 60 * 1000);
-      setSleepFeedback(`Snoozed — back in ${SLEEP_MINUTES} minutes`);
-      feedbackTimeoutRef.current = setTimeout(() => router.back(), SNOOZE_DISMISS_DELAY_MS);
-    } catch (err) {
-      setSleepFeedback(err instanceof Error ? err.message : 'Failed to snooze');
-      feedbackTimeoutRef.current = setTimeout(() => setSleepFeedback(null), FEEDBACK_DURATION_MS);
-    }
-  }, [router]);
-
+  // Resolve which alarm fired (best-effort; falls back to defaults).
   useEffect(() => {
     let cancelled = false;
+    getAlarms().then((all) => {
+      if (cancelled) return;
+      setFiringAlarm(findRecentAlarm(all, new Date()));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
+  // Load + (if needed) download the daily video.
+  useEffect(() => {
+    let cancelled = false;
     (async () => {
       try {
         const video = await getDailyVideo();
@@ -58,28 +107,21 @@ export default function VideoPlayerScreen() {
           setState({ phase: 'error', message: 'No video assigned for today yet.' });
           return;
         }
-
-        // Check if already downloaded
         const cached = await isVideoCached(video.videoId);
         if (cached) {
-          const uri = `file://${getLocalVideoPath(video.videoId)}`;
-          if (!cancelled) setState({ phase: 'ready', video, uri });
+          if (!cancelled) {
+            setState({ phase: 'ready', video, uri: `file://${getLocalVideoPath(video.videoId)}` });
+          }
           return;
         }
-
-        // Stored path from a previous session
         if (video.localPath) {
           if (!cancelled) setState({ phase: 'ready', video, uri: `file://${video.localPath}` });
           return;
         }
-
-        // Download now (foreground fallback)
         if (!cancelled) setState({ phase: 'downloading', progress: 0 });
-
         const localPath = await downloadVideo(video.videoId, video.videoUrl, (p) => {
           if (!cancelled) setState({ phase: 'downloading', progress: p });
         });
-
         if (!cancelled) {
           setState({
             phase: 'ready',
@@ -96,14 +138,39 @@ export default function VideoPlayerScreen() {
         }
       }
     })();
-
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  const handleSnooze = useCallback(async () => {
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+    try {
+      await scheduleSnooze(SNOOZE_MINUTES * 60 * 1000);
+      setFeedback(`Snoozed — back in ${SNOOZE_MINUTES} minutes`);
+      feedbackTimeoutRef.current = setTimeout(() => router.back(), SNOOZE_DISMISS_DELAY_MS);
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : 'Failed to snooze');
+      feedbackTimeoutRef.current = setTimeout(() => setFeedback(null), FEEDBACK_DURATION_MS);
+    }
+  }, [router]);
+
+  const handleWakeUp = useCallback(async () => {
+    if (state.phase === 'ready') {
+      await addToVideoLibrary({
+        videoId: state.video.videoId,
+        species: state.video.species,
+        thumbnailUrl: state.video.thumbnailUrl,
+        localPath: state.video.localPath,
+        watchedDate: getTodayDateString(),
+      }).catch(() => {});
+    }
+    router.back();
+  }, [router, state]);
 
   const handlePlaybackEnd = async () => {
     if (state.phase !== 'ready') return;
     const { video } = state;
-    // Add to library when user finishes watching
     await addToVideoLibrary({
       videoId: video.videoId,
       species: video.species,
@@ -113,144 +180,315 @@ export default function VideoPlayerScreen() {
     });
   };
 
-  if (state.phase === 'loading') {
+  // ─── Background states ───────────────────────────────────────────────────────
+  if (state.phase === 'loading' || state.phase === 'downloading' || state.phase === 'error') {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#1a6dbb" size="large" />
-        <Text style={styles.statusText}>Loading...</Text>
-      </View>
-    );
-  }
-
-  if (state.phase === 'downloading') {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#1a6dbb" size="large" />
-        <Text style={styles.statusText}>Downloading... {state.progress}%</Text>
-        <View style={styles.progressBar}>
-          <View style={[styles.progressFill, { width: `${state.progress}%` }]} />
+      <View style={[styles.statusRoot, { backgroundColor: palette.bg }]}>
+        <StatusBar style="dark" />
+        <LinearGradient
+          colors={palette.bgGradient}
+          start={{ x: 0.5, y: 0 }}
+          end={{ x: 0.5, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.statusContent}>
+          {state.phase === 'error' ? (
+            <>
+              <Text style={[styles.statusEmoji, { color: palette.text }]}>⚠</Text>
+              <Text style={[styles.statusTitle, { color: palette.text }]}>
+                Couldn't load video
+              </Text>
+              <Text style={[styles.statusSub, { color: palette.sub }]}>{state.message}</Text>
+              <Pressable
+                onPress={() => router.back()}
+                style={({ pressed }) => [
+                  styles.statusBtn,
+                  {
+                    backgroundColor: palette.accent,
+                    opacity: pressed ? 0.85 : 1,
+                  },
+                ]}
+              >
+                <Text style={styles.statusBtnText}>Go back</Text>
+              </Pressable>
+            </>
+          ) : (
+            <>
+              <ActivityIndicator color={palette.accent} size="large" />
+              <Text style={[styles.statusTitle, { color: palette.text, marginTop: 16 }]}>
+                {state.phase === 'downloading' ? 'Downloading bird video' : 'Loading'}
+              </Text>
+              {state.phase === 'downloading' && (
+                <>
+                  <Text style={[styles.statusSub, { color: palette.sub }]}>
+                    {state.progress}%
+                  </Text>
+                  <View style={[styles.progressTrack, { backgroundColor: palette.surfaceSoft }]}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        { width: `${state.progress}%`, backgroundColor: palette.accent },
+                      ]}
+                    />
+                  </View>
+                </>
+              )}
+            </>
+          )}
         </View>
       </View>
     );
   }
 
-  if (state.phase === 'error') {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.errorEmoji}>⚠️</Text>
-        <Text style={styles.errorTitle}>Couldn't load video</Text>
-        <Text style={styles.errorText}>{state.message}</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backBtnText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  // ─── Ringing scene ───────────────────────────────────────────────────────────
+  const greeting = timeOfDayGreeting(now);
+  const timeStr = firingAlarm
+    ? `${firingAlarm.hour}:${String(firingAlarm.minute).padStart(2, '0')}`
+    : `${((now.getHours() % 12) || 12)}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const label = firingAlarm?.label ?? state.video.species ?? 'Wake up';
+  const sound = firingAlarm?.sound ?? 'Skylark';
 
-  // state.phase === 'ready'
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <VideoPlayerView
-        uri={state.uri}
-        autoPlay
-        onPlaybackEnd={handlePlaybackEnd}
-        onSleep={handleSleep}
+    <View style={styles.ringRoot}>
+      <StatusBar style="light" />
+      <VideoPlayerView uri={state.uri} autoPlay onPlaybackEnd={handlePlaybackEnd} />
+
+      {/* Dimming vignette for legibility */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(0,0,0,0.35)', 'transparent', 'transparent', 'rgba(0,0,0,0.55)']}
+        locations={[0, 0.3, 0.6, 1]}
+        style={StyleSheet.absoluteFill}
       />
-      <View style={styles.overlay}>
-        <Text style={styles.speciesText}>{state.video.species}</Text>
+
+      {/* Top overlay */}
+      <View
+        pointerEvents="box-none"
+        style={[styles.topOverlay, { top: insets.top + 24 }]}
+      >
+        <BlurView intensity={24} tint="dark" style={styles.nowPill}>
+          <PulsingDot />
+          <Text style={styles.nowPillText}>NOW SINGING</Text>
+        </BlurView>
+
+        <Text style={styles.greeting}>{greeting.toUpperCase()}</Text>
+        <Text style={styles.timeHero}>{timeStr}</Text>
+        <Text style={styles.label}>{label}</Text>
+
+        <BlurView intensity={20} tint="dark" style={styles.soundChip}>
+          <Text style={styles.soundChipText}>♪ {sound}</Text>
+        </BlurView>
       </View>
-      {sleepFeedback ? (
-        <View style={styles.feedbackContainer} pointerEvents="none">
-          <Text style={styles.feedbackText}>{sleepFeedback}</Text>
+
+      {/* Bottom scrim + actions */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['transparent', 'rgba(0,0,0,0.55)']}
+        style={[styles.bottomScrim, { height: 220 + insets.bottom }]}
+      />
+
+      <View style={[styles.actions, { bottom: insets.bottom + 24 }]}>
+        <Pressable
+          onPress={handleSnooze}
+          style={({ pressed }) => [
+            styles.actionBtn,
+            { opacity: pressed ? 0.85 : 1 },
+          ]}
+        >
+          <BlurView intensity={32} tint="light" style={styles.snoozeBlur}>
+            <Text style={styles.snoozeText}>Snooze · {SNOOZE_MINUTES} min</Text>
+          </BlurView>
+        </Pressable>
+
+        <Pressable
+          onPress={handleWakeUp}
+          style={({ pressed }) => [
+            styles.actionBtn,
+            styles.wakeBtn,
+            {
+              shadowColor: palette.accent,
+              opacity: pressed ? 0.9 : 1,
+            },
+          ]}
+        >
+          <LinearGradient
+            colors={[palette.warm, palette.accent]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.wakeGradient}
+          >
+            <Text style={styles.wakeText}>Wake up</Text>
+          </LinearGradient>
+        </Pressable>
+      </View>
+
+      {feedback ? (
+        <View pointerEvents="none" style={[styles.feedbackWrap, { top: insets.top + 80 }]}>
+          <BlurView intensity={30} tint="dark" style={styles.feedbackPill}>
+            <Text style={styles.feedbackText}>{feedback}</Text>
+          </BlurView>
         </View>
       ) : null}
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000000',
-  },
-  centered: {
+  // ─── Status states (loading / downloading / error) ─────
+  statusRoot: { flex: 1, position: 'relative' },
+  statusContent: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#000000',
     padding: 32,
-    gap: 16,
+    gap: 8,
   },
-  statusText: {
-    color: '#8ab4d4',
-    fontSize: 16,
+  statusEmoji: { fontSize: 40 },
+  statusTitle: { fontFamily: FONTS.serifMedium, fontSize: 22, textAlign: 'center' },
+  statusSub: { fontFamily: FONTS.body, fontSize: 14, textAlign: 'center', marginTop: 4 },
+  statusBtn: {
+    marginTop: 24,
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 22,
   },
-  progressBar: {
+  statusBtnText: {
+    color: '#fff',
+    fontFamily: FONTS.bodyBold,
+    fontSize: 15,
+  },
+  progressTrack: {
     width: '80%',
     height: 4,
-    backgroundColor: '#1e3a5f',
     borderRadius: 2,
     overflow: 'hidden',
+    marginTop: 12,
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#1a6dbb',
-  },
-  errorEmoji: {
-    fontSize: 48,
-  },
-  errorTitle: {
-    color: '#ffffff',
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  errorText: {
-    color: '#e07070',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  backBtn: {
-    backgroundColor: '#1e3a5f',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  backBtnText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  overlay: {
+  progressFill: { height: '100%' },
+
+  // ─── Ringing scene ─────────────────────────────────────
+  ringRoot: { flex: 1, backgroundColor: '#000', position: 'relative' },
+  topOverlay: {
     position: 'absolute',
-    bottom: 60,
     left: 0,
     right: 0,
     alignItems: 'center',
-    pointerEvents: 'none',
   },
-  speciesText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 18,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+  nowPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
-  feedbackContainer: {
+  nowPillText: {
+    color: '#fff',
+    fontFamily: FONTS.monoSemibold,
+    fontSize: 10,
+    letterSpacing: 2,
+  },
+  greeting: {
+    color: 'rgba(255,255,255,0.9)',
+    fontFamily: FONTS.monoMedium,
+    fontSize: 11,
+    letterSpacing: 3,
+    marginTop: 14,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  timeHero: {
+    color: '#fff',
+    fontFamily: FONTS.serif,
+    fontSize: 110,
+    lineHeight: 116,
+    letterSpacing: -4,
+    marginTop: 6,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 18,
+  },
+  label: {
+    color: '#fff',
+    fontFamily: FONTS.serif,
+    fontSize: 22,
+    marginTop: 4,
+    textShadowColor: 'rgba(0,0,0,0.45)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 12,
+  },
+  soundChip: {
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  soundChipText: {
+    color: 'rgba(255,255,255,0.95)',
+    fontFamily: FONTS.bodyMedium,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+
+  bottomScrim: {
     position: 'absolute',
-    top: 80,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  actions: {
+    position: 'absolute',
+    left: 22,
+    right: 22,
+    gap: 12,
+  },
+  actionBtn: {
+    borderRadius: 22,
+    overflow: 'hidden',
+  },
+  snoozeBlur: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor:
+      Platform.OS === 'android' ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 22,
+  },
+  snoozeText: {
+    color: '#fff',
+    fontFamily: FONTS.bodySemibold,
+    fontSize: 16,
+  },
+  wakeBtn: {
+    shadowOpacity: 0.5,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  wakeGradient: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+  },
+  wakeText: { color: '#fff', fontFamily: FONTS.bodyBold, fontSize: 17 },
+
+  feedbackWrap: {
+    position: 'absolute',
     left: 24,
     right: 24,
     alignItems: 'center',
   },
-  feedbackText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '500',
-    backgroundColor: 'rgba(0,0,0,0.65)',
+  feedbackPill: {
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
     overflow: 'hidden',
   },
+  feedbackText: { color: '#fff', fontFamily: FONTS.bodyMedium, fontSize: 14 },
 });
