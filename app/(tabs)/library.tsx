@@ -1,19 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
+  ActivityIndicator,
   FlatList,
   Image,
-  TouchableOpacity,
-  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getVideoLibrary } from '../../services/storage';
 import { VideoLibraryEntry } from '../../constants/types';
+import { usePalette } from '../../theme/ThemeContext';
+import { FONTS } from '../../theme/fonts';
+import { FeatherMark } from '../../components/icons/BirdIcons';
+import { formatWatchedDate } from '../../utils/greeting';
 
 export default function LibraryScreen() {
   const router = useRouter();
+  const palette = usePalette();
+  const insets = useSafeAreaInsets();
   const [library, setLibrary] = useState<VideoLibraryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -23,149 +31,169 @@ export default function LibraryScreen() {
       .finally(() => setIsLoading(false));
   }, []);
 
-  if (isLoading) {
+  const renderItem = ({ item }: { item: VideoLibraryEntry }) => {
+    const playable = !!item.localPath;
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator color="#1a6dbb" />
-      </View>
+      <Pressable
+        onPress={() => playable && router.push('/video-player')}
+        style={({ pressed }) => [
+          styles.card,
+          {
+            backgroundColor: palette.surface,
+            borderColor: palette.border,
+            opacity: pressed && playable ? 0.85 : 1,
+          },
+        ]}
+      >
+        <View style={styles.thumbWrap}>
+          <Image source={{ uri: item.thumbnailUrl }} style={styles.thumb} resizeMode="cover" />
+          {!playable && (
+            <View style={[styles.thumbOverlay, { backgroundColor: 'rgba(0,0,0,0.45)' }]}>
+              <Text style={[styles.thumbOverlayText, { color: '#fff' }]}>No file</Text>
+            </View>
+          )}
+        </View>
+        <View style={styles.cardBody}>
+          <Text style={[styles.species, { color: palette.text }]}>{item.species}</Text>
+          <Text style={[styles.date, { color: palette.sub }]}>
+            {formatWatchedDate(item.watchedDate)}
+          </Text>
+        </View>
+        {playable && (
+          <Text style={[styles.chevron, { color: palette.sub }]}>›</Text>
+        )}
+      </Pressable>
     );
-  }
+  };
 
-  if (library.length === 0) {
-    return (
-      <View style={styles.centered}>
-        <Text style={styles.emptyEmoji}>🐦</Text>
-        <Text style={styles.emptyTitle}>No birds yet</Text>
-        <Text style={styles.emptyText}>
-          Birds you've watched will appear here. Set your alarm and let your first one arrive!
+  const header = (
+    <View style={[styles.header, { paddingTop: insets.top + 24 }]}>
+      <View style={styles.metaRow}>
+        <FeatherMark color={palette.accent} size={12} />
+        <Text style={[styles.metaText, { color: palette.sub }]}>
+          {library.length} {library.length === 1 ? 'BIRD' : 'BIRDS'} · COLLECTION
         </Text>
       </View>
-    );
-  }
+      <Text style={[styles.title, { color: palette.text }]}>Birds you've met</Text>
+      <Text style={[styles.subline, { color: palette.sub }]}>
+        {library.length === 0
+          ? 'Tap an alarm to start your collection.'
+          : 'Tap a card to revisit one.'}
+      </Text>
+    </View>
+  );
 
   return (
-    <FlatList
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      data={library}
-      keyExtractor={(item) => item.videoId}
-      renderItem={({ item }) => (
-        <TouchableOpacity
-          style={styles.entry}
-          onPress={() => item.localPath && router.push('/video-player')}
-          activeOpacity={item.localPath ? 0.7 : 1}
-        >
-          <View style={styles.thumbContainer}>
-            <Image source={{ uri: item.thumbnailUrl }} style={styles.thumb} resizeMode="cover" />
-            {!item.localPath && (
-              <View style={styles.thumbOverlay}>
-                <Text style={styles.thumbOverlayText}>No file</Text>
-              </View>
-            )}
+    <View style={[styles.root, { backgroundColor: palette.bg }]}>
+      <LinearGradient
+        colors={palette.bgGradient}
+        start={{ x: 0.5, y: 0 }}
+        end={{ x: 0.5, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {isLoading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={palette.accent} />
+        </View>
+      ) : library.length === 0 ? (
+        <>
+          {header}
+          <View style={styles.centered}>
+            <View
+              style={[
+                styles.emptyCard,
+                { backgroundColor: palette.surface, borderColor: palette.border },
+              ]}
+            >
+              <FeatherMark color={palette.accent} size={28} />
+              <Text style={[styles.emptyTitle, { color: palette.text }]}>No birds yet</Text>
+              <Text style={[styles.emptyText, { color: palette.sub }]}>
+                Watched birds will land here. Set an alarm and meet your first one.
+              </Text>
+            </View>
           </View>
-          <View style={styles.entryInfo}>
-            <Text style={styles.entrySpecies}>{item.species}</Text>
-            <Text style={styles.entryDate}>{item.watchedDate}</Text>
-          </View>
-          {item.localPath && <Text style={styles.chevron}>›</Text>}
-        </TouchableOpacity>
+        </>
+      ) : (
+        <FlatList
+          data={library}
+          keyExtractor={(item) => item.videoId}
+          renderItem={renderItem}
+          ListHeaderComponent={header}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          contentContainerStyle={[
+            styles.listContent,
+            { paddingBottom: insets.bottom + 80 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        />
       )}
-      ItemSeparatorComponent={() => <View style={styles.separator} />}
-      ListHeaderComponent={
-        <Text style={styles.header}>
-          {library.length} {library.length === 1 ? 'bird' : 'birds'} discovered
-        </Text>
-      }
-    />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0a1628',
+  root: { flex: 1, position: 'relative' },
+  listContent: { paddingHorizontal: 22 },
+  header: { paddingHorizontal: 22, paddingBottom: 20 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  metaText: {
+    fontSize: 11,
+    fontFamily: FONTS.monoMedium,
+    letterSpacing: 2,
   },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
+  title: {
+    fontFamily: FONTS.serif,
+    fontSize: 38,
+    letterSpacing: -0.6,
+    lineHeight: 46,
+    marginTop: 6,
+    marginBottom: 4,
   },
+  subline: { fontSize: 14, fontFamily: FONTS.body },
   centered: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 32,
-    backgroundColor: '#0a1628',
-    gap: 12,
+    paddingHorizontal: 22,
   },
-  emptyEmoji: {
-    fontSize: 56,
+  emptyCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    paddingVertical: 32,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    gap: 10,
   },
-  emptyTitle: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '600',
-  },
+  emptyTitle: { fontFamily: FONTS.serifMedium, fontSize: 20 },
   emptyText: {
-    color: '#4a7aa0',
+    fontFamily: FONTS.body,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
   },
-  header: {
-    color: '#4a7aa0',
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 16,
-  },
-  entry: {
+  card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1e3a5f',
-    borderRadius: 14,
+    borderRadius: 18,
+    borderWidth: 1,
     overflow: 'hidden',
   },
-  thumbContainer: {
-    width: 80,
-    height: 60,
+  thumbWrap: {
+    width: 84,
+    height: 64,
     position: 'relative',
   },
-  thumb: {
-    width: '100%',
-    height: '100%',
-  },
+  thumb: { width: '100%', height: '100%' },
   thumbOverlay: {
-    position: 'absolute',
-    inset: 0,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  thumbOverlayText: {
-    color: '#8ab4d4',
-    fontSize: 10,
-  },
-  entryInfo: {
-    flex: 1,
-    padding: 12,
-  },
-  entrySpecies: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 3,
-  },
-  entryDate: {
-    color: '#4a7aa0',
-    fontSize: 12,
-  },
-  chevron: {
-    color: '#4a7aa0',
-    fontSize: 22,
-    paddingRight: 12,
-  },
-  separator: {
-    height: 8,
-  },
+  thumbOverlayText: { fontSize: 10, fontFamily: FONTS.bodySemibold },
+  cardBody: { flex: 1, paddingHorizontal: 14, paddingVertical: 12 },
+  species: { fontFamily: FONTS.bodySemibold, fontSize: 15, marginBottom: 3 },
+  date: { fontFamily: FONTS.body, fontSize: 12 },
+  chevron: { fontSize: 22, paddingRight: 14, fontFamily: FONTS.body },
+  separator: { height: 10 },
 });

@@ -24,6 +24,18 @@ export function formatHeaderDate(d: Date = new Date()): string {
   return `${DAYS[d.getDay()]}  ·  ${MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
+/** "YYYY-MM-DD" → "May 18" (or "May 18, 2025" if a different year). */
+export function formatWatchedDate(iso: string, now: Date = new Date()): string {
+  const [yStr, mStr, dStr] = iso.split('-');
+  const y = Number(yStr);
+  const m = Number(mStr);
+  const d = Number(dStr);
+  if (!y || !m || !d) return iso;
+  const monthLabel = MONTHS[m - 1] ?? '';
+  if (y === now.getFullYear()) return `${monthLabel} ${d}`;
+  return `${monthLabel} ${d}, ${y}`;
+}
+
 /** Compact repeat description for an alarm card. */
 export function formatRepeat(repeat: number[]): string {
   if (repeat.length === 0) return 'One-time';
