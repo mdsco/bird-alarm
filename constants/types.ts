@@ -14,7 +14,6 @@ export interface AlarmTime {
 }
 
 export type AmPm = 'AM' | 'PM';
-export type AlarmIcon = 'songbird' | 'feather' | 'owl' | 'dove';
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = Sunday, 6 = Saturday
 
 export interface Alarm {
@@ -24,7 +23,6 @@ export interface Alarm {
   ampm: AmPm;
   label: string;
   repeat: DayOfWeek[]; // empty = one-time (fires once at next occurrence)
-  icon: AlarmIcon;
   sound: string;       // one of the sound options in constants/sounds.ts
   on: boolean;
 }

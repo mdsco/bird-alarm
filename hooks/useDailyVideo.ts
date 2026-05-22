@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { fetchDailyVideo } from '../services/api';
 import {
+  getAlarms,
   getDailyVideo,
   setDailyVideo,
   getLastFetchDate,
@@ -8,7 +9,11 @@ import {
   getTodayDateString,
 } from '../services/storage';
 import { isVideoCached, downloadVideo } from '../services/downloader';
+import { computeNextAlarm } from '../utils/nextAlarm';
 import { DailyVideoMetadata } from '../constants/types';
+
+/** Don't hit the API until we're this close to the next alarm. */
+const PREFETCH_WINDOW_MS = 10 * 60 * 1000;
 
 interface UseDailyVideoResult {
   video: DailyVideoMetadata | null;
@@ -22,8 +27,10 @@ interface UseDailyVideoResult {
 
 /**
  * Manages fetching and caching the daily video.
- * - On mount: checks if today's video is already fetched; if not, fetches from API.
- * - Checks local cache; if video file is missing, downloads it in the foreground.
+ * - On mount: if today's video is already cached, use it; otherwise only fetch
+ *   from the API when the next on-alarm is within PREFETCH_WINDOW_MS.
+ * - If the app stays open past the threshold, a one-shot timer re-checks at
+ *   the exact moment the window opens.
  */
 export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
   const [video, setVideo] = useState<DailyVideoMetadata | null>(null);
@@ -43,22 +50,23 @@ export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
       let metadata: DailyVideoMetadata | null = null;
 
       if (lastFetch === today) {
-        // Already fetched today — use cached metadata
+        // Already fetched today — reuse regardless of alarm timing.
         metadata = await getDailyVideo();
+      } else {
+        // Only hit the API if we're within the prefetch window of the next alarm.
+        const alarms = await getAlarms();
+        const next = computeNextAlarm(alarms, new Date());
+        if (next && next.msUntil <= PREFETCH_WINDOW_MS) {
+          metadata = await fetchDailyVideo(deviceId);
+          await setDailyVideo(metadata);
+          await setLastFetchDate(today);
+        }
       }
 
-      if (!metadata) {
-        // New day or first launch — fetch from API
-        metadata = await fetchDailyVideo(deviceId);
-        await setDailyVideo(metadata);
-        await setLastFetchDate(today);
-      }
-
-      // Check if file is downloaded
-      if (metadata.localPath === null) {
+      // Reattach the local path if the file is on disk but storage lost it.
+      if (metadata && metadata.localPath === null) {
         const cached = await isVideoCached(metadata.videoId);
         if (cached) {
-          // File exists but path wasn't saved — fix it
           const { getLocalVideoPath } = await import('../services/downloader');
           metadata = { ...metadata, localPath: getLocalVideoPath(metadata.videoId) };
           await setDailyVideo(metadata);
@@ -101,6 +109,30 @@ export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
   useEffect(() => {
     loadVideo();
   }, [loadVideo]);
+
+  // If we're sitting outside the prefetch window with no cached video yet,
+  // schedule a re-check at the exact moment we cross into the window.
+  useEffect(() => {
+    if (video) return;
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    (async () => {
+      const lastFetch = await getLastFetchDate();
+      if (lastFetch === getTodayDateString()) return;
+      const alarms = await getAlarms();
+      const next = computeNextAlarm(alarms, new Date());
+      if (!next) return;
+      const msUntilWindow = next.msUntil - PREFETCH_WINDOW_MS;
+      if (msUntilWindow <= 0) return;
+      timeout = setTimeout(() => {
+        if (!cancelled) loadVideo();
+      }, msUntilWindow + 1000);
+    })();
+    return () => {
+      cancelled = true;
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [video, loadVideo]);
 
   return { video, isLoading, isDownloading, downloadProgress, error, refresh, triggerDownload };
 }

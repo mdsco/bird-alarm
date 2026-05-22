@@ -106,6 +106,11 @@ To serve actual video/thumbnail files, upload them matching the paths in the man
 ```bash
 awslocal s3 cp puffin.mp4 s3://bird-alarm-local/videos/puffin.mp4
 awslocal s3 cp puffin.jpg s3://bird-alarm-local/thumbnails/puffin.jpg
+
+awslocal s3 mb s3://bird-alarm-local
+awslocal s3 cp /home/mike/Videos/yellow-headed.mp4 s3://bird-alarm-local/videos/yellow-headed.mp4
+awslocal s3 cp /home/mike/Pictures/Screenshots/yellow-headed-caracara.png s3://bird-alarm-local/thumbnails/yellow-headed-caracara.png
+awslocal s3 cp videos.json s3://bird-alarm-local/videos.json
 ```
 
 #### 4. Build the Lambda

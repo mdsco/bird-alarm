@@ -5,7 +5,6 @@ import { Alarm } from '../constants/types';
 import { usePalette } from '../theme/ThemeContext';
 import { FONTS } from '../theme/fonts';
 import { Toggle } from './Toggle';
-import { BirdIcon } from './icons/BirdIcons';
 import { formatRepeat } from '../utils/greeting';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -72,7 +71,6 @@ export function AlarmCard({ alarm, onToggle, onPress, index = 0 }: Props) {
       </View>
 
       <View style={styles.metaRow}>
-        <BirdIcon name={alarm.icon} color={palette.accent} size={16} />
         <Text style={[styles.label, { color: palette.text }]}>{alarm.label}</Text>
         <Text style={[styles.dot, { color: palette.sub }]}>·</Text>
         <Text style={[styles.repeat, { color: palette.sub }]}>{repeatStr}</Text>

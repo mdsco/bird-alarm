@@ -13,20 +13,13 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alarm, AlarmIcon, ALARM_SOUNDS, AmPm, DayOfWeek } from '../constants/types';
+import { Alarm, ALARM_SOUNDS, AmPm, DayOfWeek } from '../constants/types';
 import { useAlarms } from '../hooks/useAlarms';
 import { usePalette } from '../theme/ThemeContext';
 import { FONTS } from '../theme/fonts';
 import { TimePicker } from '../components/TimePicker';
-import { BirdIcon } from '../components/icons/BirdIcons';
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'] as const;
-const MOOD_OPTIONS: { id: AlarmIcon; label: string }[] = [
-  { id: 'songbird', label: 'Songbird' },
-  { id: 'feather', label: 'Feather' },
-  { id: 'owl', label: 'Owl' },
-  { id: 'dove', label: 'Dove' },
-];
 
 function defaultAlarm(): Alarm {
   return {
@@ -36,7 +29,6 @@ function defaultAlarm(): Alarm {
     ampm: 'AM',
     label: 'Wake up',
     repeat: [1, 2, 3, 4, 5],
-    icon: 'songbird',
     sound: 'Skylark',
     on: true,
   };
@@ -60,7 +52,6 @@ export default function EditAlarmScreen() {
   const [ampm, setAmpm] = useState<AmPm>('AM');
   const [label, setLabel] = useState('Wake up');
   const [repeat, setRepeat] = useState<DayOfWeek[]>([1, 2, 3, 4, 5]);
-  const [icon, setIcon] = useState<AlarmIcon>('songbird');
   const [sound, setSound] = useState<string>('Skylark');
 
   // Hydrate state once the existing alarm has resolved from storage.
@@ -73,7 +64,6 @@ export default function EditAlarmScreen() {
     setAmpm(source.ampm);
     setLabel(source.label);
     setRepeat(source.repeat);
-    setIcon(source.icon);
     setSound(source.sound);
     // If we're editing, wait until the alarm resolves; otherwise mark hydrated
     // immediately so the form is interactive.
@@ -88,8 +78,8 @@ export default function EditAlarmScreen() {
 
   const handleSave = async () => {
     const payload: Alarm = existing
-      ? { ...existing, hour, minute, ampm, label, repeat, icon, sound }
-      : { ...defaultAlarm(), hour, minute, ampm, label, repeat, icon, sound, on: true };
+      ? { ...existing, hour, minute, ampm, label, repeat, sound }
+      : { ...defaultAlarm(), hour, minute, ampm, label, repeat, sound, on: true };
     try {
       if (existing) await updateAlarm(payload);
       else await addAlarm(payload);
@@ -225,48 +215,6 @@ export default function EditAlarmScreen() {
               </View>
             </View>
 
-            {/* Mood */}
-            <View
-              style={[
-                styles.rowStack,
-                { backgroundColor: palette.surface, borderColor: palette.border },
-              ]}
-            >
-              <Text style={[styles.rowTitle, { color: palette.sub }]}>MOOD</Text>
-              <View style={styles.moodRow}>
-                {MOOD_OPTIONS.map((opt) => {
-                  const active = icon === opt.id;
-                  return (
-                    <Pressable
-                      key={opt.id}
-                      onPress={() => setIcon(opt.id)}
-                      style={[
-                        styles.moodBtn,
-                        {
-                          backgroundColor: active ? palette.accentSoft : palette.surfaceSoft,
-                          borderColor: active ? palette.accent : 'transparent',
-                        },
-                      ]}
-                    >
-                      <BirdIcon
-                        name={opt.id}
-                        color={active ? palette.accent : palette.sub}
-                        size={20}
-                      />
-                      <Text
-                        style={[
-                          styles.moodLabel,
-                          { color: active ? palette.text : palette.sub },
-                        ]}
-                      >
-                        {opt.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
             {/* Sound */}
             <View
               style={[
@@ -366,17 +314,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayBtnText: { fontFamily: FONTS.bodyBold, fontSize: 12 },
-  moodRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  moodBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-    borderRadius: 14,
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1.5,
-  },
-  moodLabel: { fontFamily: FONTS.bodySemibold, fontSize: 11 },
   soundRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
   soundPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
   soundText: { fontFamily: FONTS.bodySemibold, fontSize: 12 },
