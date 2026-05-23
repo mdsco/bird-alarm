@@ -78,6 +78,8 @@ export default function VideoPlayerScreen() {
   const [firingAlarm, setFiringAlarm] = useState<Alarm | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showFacts, setShowFacts] = useState(false);
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(true);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoRef = useRef<VideoPlayerHandle>(null);
   const now = useMemo(() => new Date(), []);
@@ -85,6 +87,7 @@ export default function VideoPlayerScreen() {
   // Intro overlay fades to a compact corner time pill ~3s after the video starts.
   const introOpacity = useRef(new Animated.Value(1)).current;
   const pillOpacity = useRef(new Animated.Value(0)).current;
+  const chromeOpacity = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     return () => {
@@ -203,6 +206,25 @@ export default function VideoPlayerScreen() {
     setShowFacts(false);
   }, []);
 
+  const handleToggleChrome = useCallback(() => {
+    setChromeHidden((prev) => {
+      const next = !prev;
+      Animated.timing(chromeOpacity, {
+        toValue: next ? 0 : 1,
+        duration: 220,
+        useNativeDriver: true,
+      }).start();
+      return next;
+    });
+  }, [chromeOpacity]);
+
+  const handleTogglePlay = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.isPlaying()) video.pause();
+    else video.play();
+  }, []);
+
   const handlePlaybackEnd = async () => {
     if (state.phase !== 'ready') return;
     const { video } = state;
@@ -285,7 +307,13 @@ export default function VideoPlayerScreen() {
   return (
     <View style={styles.ringRoot}>
       <StatusBar style="light" />
-      <VideoPlayerView ref={videoRef} uri={state.uri} autoPlay onPlaybackEnd={handlePlaybackEnd} />
+      <VideoPlayerView
+        ref={videoRef}
+        uri={state.uri}
+        autoPlay
+        onPlaybackEnd={handlePlaybackEnd}
+        onPlayingChange={setIsPlaying}
+      />
 
       {/* Dimming vignette for legibility */}
       <LinearGradient
@@ -295,6 +323,12 @@ export default function VideoPlayerScreen() {
         style={StyleSheet.absoluteFill}
       />
 
+      {/* Chrome wrapper — collapsing this layer hides every overlay element at once.
+          The inner views keep their own opacity/visibility logic; opacity multiplies through. */}
+      <Animated.View
+        pointerEvents={chromeHidden ? 'none' : 'box-none'}
+        style={[StyleSheet.absoluteFill, { opacity: chromeOpacity }]}
+      >
       {/* Top overlay — fades out a few seconds in so the video gets the spotlight. */}
       <Animated.View
         pointerEvents="none"
@@ -387,6 +421,41 @@ export default function VideoPlayerScreen() {
           </BlurView>
         </View>
       ) : null}
+      </Animated.View>
+
+      {/* Persistent corner controls — siblings of the chrome wrapper so they stay
+          visible and tappable even when the rest of the overlay is faded out. */}
+      <View style={[styles.cornerControls, { top: insets.top + 16 }]} pointerEvents="box-none">
+        <Pressable
+          onPress={handleToggleChrome}
+          hitSlop={10}
+          style={({ pressed }) => [
+            styles.cornerBtn,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={chromeHidden ? 'Show overlay' : 'Hide overlay'}
+        >
+          <BlurView intensity={24} tint="dark" style={styles.cornerBtnInner}>
+            <Text style={styles.cornerBtnIcon}>{chromeHidden ? '⊘' : '⊙'}</Text>
+          </BlurView>
+        </Pressable>
+
+        <Pressable
+          onPress={handleTogglePlay}
+          hitSlop={10}
+          style={({ pressed }) => [
+            styles.cornerBtn,
+            { opacity: pressed ? 0.7 : 1 },
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={isPlaying ? 'Pause video' : 'Play video'}
+        >
+          <BlurView intensity={24} tint="dark" style={styles.cornerBtnInner}>
+            <Text style={styles.cornerBtnIcon}>{isPlaying ? '❚❚' : '▶'}</Text>
+          </BlurView>
+        </Pressable>
+      </View>
 
       {showFacts ? (
         <Pressable style={styles.factsScrim} onPress={handleCloseFacts}>
@@ -578,6 +647,34 @@ const styles = StyleSheet.create({
     borderRadius: 22,
   },
   wakeText: { color: '#fff', fontFamily: FONTS.bodyBold, fontSize: 17 },
+
+  cornerControls: {
+    position: 'absolute',
+    left: 16,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  cornerBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  cornerBtnInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor:
+      Platform.OS === 'android' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 16,
+  },
+  cornerBtnIcon: {
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 14,
+    lineHeight: 16,
+  },
 
   feedbackWrap: {
     position: 'absolute',

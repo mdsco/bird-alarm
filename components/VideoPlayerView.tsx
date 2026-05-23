@@ -12,6 +12,7 @@ interface VideoPlayerViewProps {
   uri: string;
   autoPlay?: boolean;
   onPlaybackEnd?: () => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
 }
 
 /**
@@ -19,7 +20,7 @@ interface VideoPlayerViewProps {
  * All ringing-screen overlay UI lives in the parent route.
  */
 export const VideoPlayerView = forwardRef<VideoPlayerHandle, VideoPlayerViewProps>(
-  function VideoPlayerView({ uri, autoPlay = true, onPlaybackEnd }, ref) {
+  function VideoPlayerView({ uri, autoPlay = true, onPlaybackEnd, onPlayingChange }, ref) {
     const [isPlaying, setIsPlaying] = useState(autoPlay);
 
     const player = useVideoPlayer(uri, (p) => {
@@ -49,9 +50,10 @@ export const VideoPlayerView = forwardRef<VideoPlayerHandle, VideoPlayerViewProp
     React.useEffect(() => {
       const subscription = player.addListener('playingChange', ({ isPlaying: playing }) => {
         setIsPlaying(playing);
+        onPlayingChange?.(playing);
       });
       return () => subscription.remove();
-    }, [player]);
+    }, [player, onPlayingChange]);
 
     const togglePause = () => {
       if (isPlaying) player.pause();
