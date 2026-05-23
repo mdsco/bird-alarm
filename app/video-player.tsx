@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PulsingDot } from '../components/PulsingDot';
-import { VideoPlayerView } from '../components/VideoPlayerView';
+import { VideoPlayerView, VideoPlayerHandle } from '../components/VideoPlayerView';
 import { Alarm,DailyVideoMetadata } from '../constants/types';
 import { scheduleSnooze } from '../services/alarms';
 import { downloadVideo,getLocalVideoPath,isVideoCached } from '../services/downloader';
@@ -77,7 +77,9 @@ export default function VideoPlayerScreen() {
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const [firingAlarm, setFiringAlarm] = useState<Alarm | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [showFacts, setShowFacts] = useState(false);
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoRef = useRef<VideoPlayerHandle>(null);
   const now = useMemo(() => new Date(), []);
 
   // Intro overlay fades to a compact corner time pill ~3s after the video starts.
@@ -192,6 +194,15 @@ export default function VideoPlayerScreen() {
     router.back();
   }, [router, state]);
 
+  const handleOpenFacts = useCallback(() => {
+    videoRef.current?.pause();
+    setShowFacts(true);
+  }, []);
+
+  const handleCloseFacts = useCallback(() => {
+    setShowFacts(false);
+  }, []);
+
   const handlePlaybackEnd = async () => {
     if (state.phase !== 'ready') return;
     const { video } = state;
@@ -274,7 +285,7 @@ export default function VideoPlayerScreen() {
   return (
     <View style={styles.ringRoot}>
       <StatusBar style="light" />
-      <VideoPlayerView uri={state.uri} autoPlay onPlaybackEnd={handlePlaybackEnd} />
+      <VideoPlayerView ref={videoRef} uri={state.uri} autoPlay onPlaybackEnd={handlePlaybackEnd} />
 
       {/* Dimming vignette for legibility */}
       <LinearGradient
@@ -324,6 +335,18 @@ export default function VideoPlayerScreen() {
 
       <View style={[styles.actions, { bottom: insets.bottom + 24 }]}>
         <Pressable
+          onPress={handleOpenFacts}
+          style={({ pressed }) => [styles.factsPillBtn, { opacity: pressed ? 0.85 : 1 }]}
+        >
+          <BlurView intensity={28} tint="dark" style={styles.factsPill}>
+            <Text style={styles.factsPillIcon}>ⓘ</Text>
+            <Text style={styles.factsPillText} numberOfLines={1}>
+              {state.video.species}
+            </Text>
+          </BlurView>
+        </Pressable>
+
+        <Pressable
           onPress={handleSnooze}
           style={({ pressed }) => [
             styles.actionBtn,
@@ -363,6 +386,33 @@ export default function VideoPlayerScreen() {
             <Text style={styles.feedbackText}>{feedback}</Text>
           </BlurView>
         </View>
+      ) : null}
+
+      {showFacts ? (
+        <Pressable style={styles.factsScrim} onPress={handleCloseFacts}>
+          <Pressable onPress={() => {}} style={styles.factsCardWrap}>
+            <BlurView intensity={40} tint="dark" style={styles.factsCard}>
+              <Text style={styles.factsTitle}>{state.video.species}</Text>
+              {(state.video.description ?? '')
+                .split(/\n\n+/)
+                .filter((p) => p.trim().length > 0)
+                .map((para, i) => (
+                  <Text key={i} style={styles.factsBody}>
+                    {para.trim()}
+                  </Text>
+                ))}
+              <Pressable
+                onPress={handleCloseFacts}
+                style={({ pressed }) => [
+                  styles.factsCloseBtn,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+              >
+                <Text style={styles.factsCloseText}>Close</Text>
+              </Pressable>
+            </BlurView>
+          </Pressable>
+        </Pressable>
       ) : null}
     </View>
   );
@@ -542,4 +592,81 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   feedbackText: { color: '#fff', fontFamily: FONTS.bodyMedium, fontSize: 14 },
+
+  // ─── Species facts pill + overlay ──────────────────────
+  factsPillBtn: {
+    alignSelf: 'center',
+    borderRadius: 999,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  factsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor:
+      Platform.OS === 'android' ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  factsPillIcon: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+  },
+  factsPillText: {
+    color: '#fff',
+    fontFamily: FONTS.bodyMedium,
+    fontSize: 14,
+    maxWidth: 220,
+  },
+  factsScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  factsCardWrap: {
+    width: '100%',
+    maxWidth: 420,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  factsCard: {
+    padding: 22,
+    backgroundColor:
+      Platform.OS === 'android' ? 'rgba(20,20,20,0.85)' : 'rgba(20,20,20,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 20,
+    gap: 12,
+  },
+  factsTitle: {
+    color: '#fff',
+    fontFamily: FONTS.serifMedium,
+    fontSize: 22,
+    marginBottom: 4,
+  },
+  factsBody: {
+    color: 'rgba(255,255,255,0.92)',
+    fontFamily: FONTS.body,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  factsCloseBtn: {
+    alignSelf: 'flex-end',
+    marginTop: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  factsCloseText: {
+    color: '#fff',
+    fontFamily: FONTS.bodySemibold,
+    fontSize: 14,
+  },
 });
