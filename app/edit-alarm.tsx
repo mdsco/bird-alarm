@@ -13,7 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alarm, ALARM_SOUNDS, AmPm, DayOfWeek } from '../constants/types';
+import { Alarm, AmPm, DayOfWeek } from '../constants/types';
 import { useAlarms } from '../hooks/useAlarms';
 import { usePalette } from '../theme/ThemeContext';
 import { FONTS } from '../theme/fonts';
@@ -29,7 +29,6 @@ function defaultAlarm(): Alarm {
     ampm: 'AM',
     label: 'Wake up',
     repeat: [1, 2, 3, 4, 5],
-    sound: 'Skylark',
     on: true,
   };
 }
@@ -52,7 +51,6 @@ export default function EditAlarmScreen() {
   const [ampm, setAmpm] = useState<AmPm>('AM');
   const [label, setLabel] = useState('Wake up');
   const [repeat, setRepeat] = useState<DayOfWeek[]>([1, 2, 3, 4, 5]);
-  const [sound, setSound] = useState<string>('Skylark');
 
   // Hydrate state once the existing alarm has resolved from storage.
   const [hydrated, setHydrated] = useState(false);
@@ -64,7 +62,6 @@ export default function EditAlarmScreen() {
     setAmpm(source.ampm);
     setLabel(source.label);
     setRepeat(source.repeat);
-    setSound(source.sound);
     // If we're editing, wait until the alarm resolves; otherwise mark hydrated
     // immediately so the form is interactive.
     if (alarmId ? !!existing : true) setHydrated(true);
@@ -78,8 +75,8 @@ export default function EditAlarmScreen() {
 
   const handleSave = async () => {
     const payload: Alarm = existing
-      ? { ...existing, hour, minute, ampm, label, repeat, sound }
-      : { ...defaultAlarm(), hour, minute, ampm, label, repeat, sound, on: true };
+      ? { ...existing, hour, minute, ampm, label, repeat }
+      : { ...defaultAlarm(), hour, minute, ampm, label, repeat, on: true };
     try {
       if (existing) await updateAlarm(payload);
       else await addAlarm(payload);
@@ -215,42 +212,6 @@ export default function EditAlarmScreen() {
               </View>
             </View>
 
-            {/* Sound */}
-            <View
-              style={[
-                styles.rowStack,
-                { backgroundColor: palette.surface, borderColor: palette.border },
-              ]}
-            >
-              <Text style={[styles.rowTitle, { color: palette.sub }]}>SOUND</Text>
-              <View style={styles.soundRow}>
-                {ALARM_SOUNDS.map((s) => {
-                  const active = sound === s;
-                  return (
-                    <Pressable
-                      key={s}
-                      onPress={() => setSound(s)}
-                      style={[
-                        styles.soundPill,
-                        {
-                          backgroundColor: active ? palette.text : palette.surfaceSoft,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.soundText,
-                          { color: active ? palette.surface : palette.sub },
-                        ]}
-                      >
-                        {s}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-
             {!isNew && (
               <Pressable onPress={handleDelete} style={styles.deleteBtn}>
                 <Text style={styles.deleteText}>Delete alarm</Text>
@@ -314,9 +275,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayBtnText: { fontFamily: FONTS.bodyBold, fontSize: 12 },
-  soundRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
-  soundPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-  soundText: { fontFamily: FONTS.bodySemibold, fontSize: 12 },
   deleteBtn: { marginTop: 6, padding: 12, alignItems: 'center' },
   deleteText: { color: '#C8463C', fontSize: 14, fontFamily: FONTS.bodySemibold },
 });

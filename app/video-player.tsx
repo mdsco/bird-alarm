@@ -1,30 +1,31 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React,{ useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
-import { StatusBar } from 'expo-status-bar';
+import { PulsingDot } from '../components/PulsingDot';
+import { VideoPlayerView } from '../components/VideoPlayerView';
+import { Alarm,DailyVideoMetadata } from '../constants/types';
+import { scheduleSnooze } from '../services/alarms';
+import { downloadVideo,getLocalVideoPath,isVideoCached } from '../services/downloader';
 import {
+  addToVideoLibrary,
   getAlarms,
   getDailyVideo,
-  addToVideoLibrary,
   getTodayDateString,
 } from '../services/storage';
-import { isVideoCached, downloadVideo, getLocalVideoPath } from '../services/downloader';
-import { scheduleSnooze } from '../services/alarms';
-import { VideoPlayerView } from '../components/VideoPlayerView';
-import { PulsingDot } from '../components/PulsingDot';
 import { usePalette } from '../theme/ThemeContext';
 import { FONTS } from '../theme/fonts';
-import { Alarm, DailyVideoMetadata } from '../constants/types';
 import { to24h } from '../utils/nextAlarm';
 
 const SNOOZE_MINUTES = 9;
@@ -79,11 +80,34 @@ export default function VideoPlayerScreen() {
   const feedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const now = useMemo(() => new Date(), []);
 
+  // Intro overlay fades to a compact corner time pill ~3s after the video starts.
+  const introOpacity = useRef(new Animated.Value(1)).current;
+  const pillOpacity = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     return () => {
       if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (state.phase !== 'ready') return;
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(introOpacity, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pillOpacity, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 10000);
+    return () => clearTimeout(timer);
+  }, [state.phase, introOpacity, pillOpacity]);
 
   // Resolve which alarm fired (best-effort; falls back to defaults).
   useEffect(() => {
@@ -246,7 +270,6 @@ export default function VideoPlayerScreen() {
     ? `${firingAlarm.hour}:${String(firingAlarm.minute).padStart(2, '0')}`
     : `${((now.getHours() % 12) || 12)}:${String(now.getMinutes()).padStart(2, '0')}`;
   const label = firingAlarm?.label ?? state.video.species ?? 'Wake up';
-  const sound = firingAlarm?.sound ?? 'Skylark';
 
   return (
     <View style={styles.ringRoot}>
@@ -261,10 +284,10 @@ export default function VideoPlayerScreen() {
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Top overlay */}
-      <View
-        pointerEvents="box-none"
-        style={[styles.topOverlay, { top: insets.top + 24 }]}
+      {/* Top overlay — fades out a few seconds in so the video gets the spotlight. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.topOverlay, { top: insets.top + 24, opacity: introOpacity }]}
       >
         <BlurView intensity={24} tint="dark" style={styles.nowPill}>
           <PulsingDot />
@@ -274,11 +297,23 @@ export default function VideoPlayerScreen() {
         <Text style={styles.greeting}>{greeting.toUpperCase()}</Text>
         <Text style={styles.timeHero}>{timeStr}</Text>
         <Text style={styles.label}>{label}</Text>
+      </Animated.View>
 
-        <BlurView intensity={20} tint="dark" style={styles.soundChip}>
-          <Text style={styles.soundChipText}>♪ {sound}</Text>
+      {/* Persistent compact time pill — fades in as the intro fades out. */}
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.timePillWrap, { top: insets.top + 16, opacity: pillOpacity }]}
+      >
+        <BlurView intensity={24} tint="dark" style={styles.timePill}>
+          <Text style={styles.timePillText}>{timeStr}</Text>
+          {firingAlarm?.label ? (
+            <>
+              <Text style={styles.timePillDot}>·</Text>
+              <Text style={styles.timePillLabel}>{firingAlarm.label}</Text>
+            </>
+          ) : null}
         </BlurView>
-      </View>
+      </Animated.View>
 
       {/* Bottom scrim + actions */}
       <LinearGradient
@@ -419,20 +454,36 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 12,
   },
-  soundChip: {
-    marginTop: 14,
-    paddingHorizontal: 12,
+  timePillWrap: {
+    position: 'absolute',
+    right: 20,
+    alignItems: 'flex-end',
+  },
+  timePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 999,
     overflow: 'hidden',
   },
-  soundChipText: {
+  timePillText: {
+    color: '#fff',
+    fontFamily: FONTS.monoSemibold,
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+  timePillDot: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+  },
+  timePillLabel: {
     color: 'rgba(255,255,255,0.95)',
     fontFamily: FONTS.bodyMedium,
-    fontSize: 11,
-    letterSpacing: 0.5,
+    fontSize: 13,
+    maxWidth: 160,
   },
-
   bottomScrim: {
     position: 'absolute',
     left: 0,

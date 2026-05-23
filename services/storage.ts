@@ -112,7 +112,6 @@ export async function getAlarms(): Promise<Alarm[]> {
           minute: legacyTime.minute,
           label: 'Wake up',
           repeat: [1, 2, 3, 4, 5],
-          sound: 'Skylark',
           on: legacyEnabled,
         },
       ]

@@ -23,19 +23,8 @@ export interface Alarm {
   ampm: AmPm;
   label: string;
   repeat: DayOfWeek[]; // empty = one-time (fires once at next occurrence)
-  sound: string;       // one of the sound options in constants/sounds.ts
   on: boolean;
 }
-
-export const ALARM_SOUNDS = [
-  'Skylark',
-  'Robin',
-  'Goldfinch',
-  'Nightingale',
-  'Wren',
-  'Mourning Dove',
-] as const;
-export type AlarmSound = (typeof ALARM_SOUNDS)[number];
 
 export interface VideoLibraryEntry {
   videoId: string;
