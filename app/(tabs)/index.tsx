@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useAlarms } from '../../hooks/useAlarms';
+import { useDailyVideo } from '../../hooks/useDailyVideo';
+import { useDeviceId } from '../../hooks/useDeviceId';
 import { usePalette } from '../../theme/ThemeContext';
 import { FONTS } from '../../theme/fonts';
 import { AlarmCard } from '../../components/AlarmCard';
@@ -27,6 +29,8 @@ export default function AlarmListScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { alarms, isLoading, toggleAlarm } = useAlarms();
+  const { deviceId } = useDeviceId();
+  useDailyVideo(deviceId);
   const [now, setNow] = useState(() => new Date());
 
   // Tick the "next chime" line every 30s so the countdown stays accurate.

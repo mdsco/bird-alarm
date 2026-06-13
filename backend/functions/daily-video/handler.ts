@@ -74,6 +74,7 @@ export const handler = async (
             thumbnailUrl: `${cfBaseUrl}/${video.thumbnail}`,
             species: video.species,
             description: video.description,
+            facts: video.facts,
           };
           return makeResponse(200, response);
         }
@@ -102,6 +103,7 @@ export const handler = async (
       thumbnailUrl: `${cfBaseUrl}/${chosen.thumbnail}`,
       species: chosen.species,
       description: chosen.description,
+      facts: chosen.facts,
     };
     return makeResponse(200, response);
   } catch (err) {

@@ -8,13 +8,14 @@ import {
   Animated,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PulsingDot } from '../components/PulsingDot';
-import { VideoPlayerView, VideoPlayerHandle } from '../components/VideoPlayerView';
+import { VideoPlayerHandle,VideoPlayerView } from '../components/VideoPlayerView';
 import { Alarm,DailyVideoMetadata } from '../constants/types';
 import { scheduleSnooze } from '../services/alarms';
 import { downloadVideo,getLocalVideoPath,isVideoCached } from '../services/downloader';
@@ -69,12 +70,27 @@ function timeOfDayGreeting(d: Date): string {
   return 'Night birds singing';
 }
 
+function FactRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.factRow}>
+      <Text style={styles.factRowLabel}>{label}</Text>
+      <Text style={styles.factRowValue}>{value}</Text>
+    </View>
+  );
+}
+
 export default function VideoPlayerScreen() {
   const router = useRouter();
   const palette = usePalette();
   const insets = useSafeAreaInsets();
 
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
+  console.log('[video-player] render', {
+    phase: state.phase,
+    progress: state.phase === 'downloading' ? state.progress : undefined,
+    videoId: state.phase === 'ready' ? state.video.videoId : undefined,
+    errorMessage: state.phase === 'error' ? state.message : undefined,
+  });
   const [firingAlarm, setFiringAlarm] = useState<Alarm | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showFacts, setShowFacts] = useState(false);
@@ -128,15 +144,25 @@ export default function VideoPlayerScreen() {
 
   // Load + (if needed) download the daily video.
   useEffect(() => {
+    console.log('[video-player] load effect FIRED');
     let cancelled = false;
+    let lastProgressLogged = -1;
     (async () => {
       try {
         const video = await getDailyVideo();
+        console.log('[video-player] getDailyVideo result', {
+          hasVideo: !!video,
+          videoId: video?.videoId,
+          species: video?.species,
+          localPath: video?.localPath,
+          videoUrl: video?.videoUrl,
+        });
         if (!video) {
           setState({ phase: 'error', message: 'No video assigned for today yet.' });
           return;
         }
         const cached = await isVideoCached(video.videoId);
+        console.log('[video-player] isVideoCached', { videoId: video.videoId, cached });
         if (cached) {
           if (!cancelled) {
             setState({ phase: 'ready', video, uri: `file://${getLocalVideoPath(video.videoId)}` });
@@ -144,13 +170,27 @@ export default function VideoPlayerScreen() {
           return;
         }
         if (video.localPath) {
+          console.log('[video-player] using metadata localPath, skipping download', {
+            localPath: video.localPath,
+          });
           if (!cancelled) setState({ phase: 'ready', video, uri: `file://${video.localPath}` });
           return;
         }
+        console.log('[video-player] download START', {
+          videoId: video.videoId,
+          videoUrl: video.videoUrl,
+        });
         if (!cancelled) setState({ phase: 'downloading', progress: 0 });
         const localPath = await downloadVideo(video.videoId, video.videoUrl, (p) => {
+          // Log at 0/25/50/75/100 boundaries to avoid log spam.
+          const bucket = Math.floor(p / 25) * 25;
+          if (bucket !== lastProgressLogged) {
+            lastProgressLogged = bucket;
+            console.log('[video-player] download progress', { percent: p });
+          }
           if (!cancelled) setState({ phase: 'downloading', progress: p });
         });
+        console.log('[video-player] download COMPLETE', { localPath });
         if (!cancelled) {
           setState({
             phase: 'ready',
@@ -159,6 +199,7 @@ export default function VideoPlayerScreen() {
           });
         }
       } catch (err) {
+        console.warn('[video-player] load/download FAILED', err);
         if (!cancelled) {
           setState({
             phase: 'error',
@@ -461,24 +502,49 @@ export default function VideoPlayerScreen() {
         <Pressable style={styles.factsScrim} onPress={handleCloseFacts}>
           <Pressable onPress={() => {}} style={styles.factsCardWrap}>
             <BlurView intensity={40} tint="dark" style={styles.factsCard}>
-              <Text style={styles.factsTitle}>{state.video.species}</Text>
-              {(state.video.description ?? '')
-                .split(/\n\n+/)
-                .filter((p) => p.trim().length > 0)
-                .map((para, i) => (
-                  <Text key={i} style={styles.factsBody}>
-                    {para.trim()}
-                  </Text>
-                ))}
-              <Pressable
-                onPress={handleCloseFacts}
-                style={({ pressed }) => [
-                  styles.factsCloseBtn,
-                  { opacity: pressed ? 0.7 : 1 },
-                ]}
+              <ScrollView
+                contentContainerStyle={styles.factsScroll}
+                showsVerticalScrollIndicator={false}
               >
-                <Text style={styles.factsCloseText}>Close</Text>
-              </Pressable>
+                <Text style={styles.factsTitle}>{state.video.species}</Text>
+                <Text style={styles.factsScientific}>
+                  {state.video.facts.scientificName}
+                </Text>
+
+                <View style={styles.factsRowGroup}>
+                  <FactRow label="Family" value={state.video.facts.family} />
+                  <FactRow label="Habitat" value={state.video.facts.habitat} />
+                  <FactRow label="Diet" value={state.video.facts.diet} />
+                  <FactRow label="Size" value={state.video.facts.size} />
+                  <FactRow label="Range" value={state.video.facts.range} />
+                  <FactRow
+                    label="Status"
+                    value={state.video.facts.conservationStatus}
+                  />
+                </View>
+
+                {state.video.facts.funFacts.length > 0 ? (
+                  <>
+                    <Text style={styles.factsSectionHeader}>Did you know?</Text>
+                    {state.video.facts.funFacts.map((fact, i) => (
+                      <View key={i} style={styles.factBulletRow}>
+                        <Text style={styles.factBullet}>•</Text>
+                        <Text style={styles.factBulletText}>{fact}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+
+                <Pressable
+                  onPress={handleCloseFacts}
+                  style={({ pressed }) => [
+                    styles.factsCloseBtn,
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <Text style={styles.factsCloseText}>Close</Text>
+                </Pressable>
+              </ScrollView>
             </BlurView>
           </Pressable>
         </Pressable>
@@ -739,18 +805,74 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
     borderRadius: 20,
+    maxHeight: '85%',
+  },
+  factsScroll: {
     gap: 12,
   },
   factsTitle: {
     color: '#fff',
     fontFamily: FONTS.serifMedium,
     fontSize: 22,
+  },
+  factsScientific: {
+    color: 'rgba(255,255,255,0.7)',
+    fontFamily: FONTS.body,
+    fontSize: 14,
+    fontStyle: 'italic',
+    marginTop: -8,
     marginBottom: 4,
   },
   factsBody: {
     color: 'rgba(255,255,255,0.92)',
     fontFamily: FONTS.body,
     fontSize: 15,
+    lineHeight: 22,
+  },
+  factsRowGroup: {
+    gap: 8,
+  },
+  factRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  factRowLabel: {
+    color: 'rgba(255,255,255,0.55)',
+    fontFamily: FONTS.monoMedium,
+    fontSize: 11,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    width: 72,
+    paddingTop: 2,
+  },
+  factRowValue: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.92)',
+    fontFamily: FONTS.body,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  factsSectionHeader: {
+    color: '#fff',
+    fontFamily: FONTS.serifMedium,
+    fontSize: 16,
+    marginTop: 8,
+  },
+  factBulletRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 4,
+  },
+  factBullet: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  factBulletText: {
+    flex: 1,
+    color: 'rgba(255,255,255,0.92)',
+    fontFamily: FONTS.body,
+    fontSize: 14,
     lineHeight: 22,
   },
   factsCloseBtn: {

@@ -5,7 +5,22 @@
       "species": "Yellow-headed Caracara",
       "description": "Yellow-headed Caracara (Daptrius chimachima) calling.",
       "file": "videos/yellow-headed.mp4",
-      "thumbnail": "thumbnails/yellow-headed-caracara.png"
+      "thumbnail": "thumbnails/yellow-headed-caracara.png",
+      "facts": {
+        "scientificName": "Daptrius chimachima",
+        "family": "Falconidae",
+        "habitat": "Open savannas, forest edges, pastures, and roadsides; often near cattle.",
+        "diet": "Omnivorous — carrion, insects, small reptiles, fruit, and ticks picked from livestock.",
+        "size": "41-46 cm long, 280-360 g, wingspan ~80 cm.",
+        "range": "Central and South America, from Costa Rica south to northern Argentina.",
+        "conservationStatus": "Least Concern",
+        "funFacts": [
+          "Often perches on cattle and capybaras to pick off ticks and botfly larvae.",
+          "Despite being a falcon, it's a slow, opportunistic forager rather than an aerial hunter.",
+          "Juveniles have streaked brown plumage and look quite different from the pale-headed adults.",
+          "Its loud, screeching call is the source of its onomatopoeic local name 'chimachima'."
+        ]
+      }
     }
   ]
 }

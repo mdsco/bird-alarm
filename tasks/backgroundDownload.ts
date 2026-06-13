@@ -8,8 +8,8 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { BACKGROUND_DOWNLOAD_TASK } from '../constants/tasks';
+import { downloadVideo,isVideoCached } from '../services/downloader';
 import { getDailyVideo } from '../services/storage';
-import { isVideoCached, downloadVideo } from '../services/downloader';
 
 TaskManager.defineTask(BACKGROUND_DOWNLOAD_TASK, async (): Promise<BackgroundTask.BackgroundTaskResult> => {
   try {

@@ -1,9 +1,21 @@
+export interface BirdFacts {
+  scientificName: string;
+  family: string;
+  habitat: string;
+  diet: string;
+  size: string;
+  range: string;
+  conservationStatus: string;
+  funFacts: string[];
+}
+
 export interface VideoEntry {
   id: string;
   species: string;
   file: string;       // S3 key, e.g. "videos/v001.mp4"
   thumbnail: string;  // S3 key, e.g. "thumbnails/v001.jpg"
   description: string;
+  facts: BirdFacts;
 }
 
 export interface Manifest {
@@ -27,4 +39,5 @@ export interface DailyVideoResponse {
   thumbnailUrl: string;
   species: string;
   description: string;
+  facts: BirdFacts;
 }

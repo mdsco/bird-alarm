@@ -1,9 +1,21 @@
+export interface BirdFacts {
+  scientificName: string;
+  family: string;
+  habitat: string;
+  diet: string;
+  size: string;
+  range: string;
+  conservationStatus: string;
+  funFacts: string[];
+}
+
 export interface DailyVideoMetadata {
   videoId: string;
   videoUrl: string;       // CloudFront URL
   thumbnailUrl: string;   // CloudFront thumbnail URL
   species: string;
   description: string;
+  facts: BirdFacts;
   localPath: string | null; // null until downloaded
   assignedDate: string;   // 'YYYY-MM-DD'
 }

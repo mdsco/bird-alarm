@@ -1,28 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../constants/storage-keys';
+
+import { useCallback,useEffect,useState } from 'react';
+import { DailyVideoMetadata } from '../constants/types';
 import { fetchDailyVideo } from '../services/api';
+import { isVideoCached } from '../services/downloader';
 import {
   getAlarms,
   getDailyVideo,
-  setDailyVideo,
   getLastFetchDate,
-  setLastFetchDate,
   getTodayDateString,
+  setDailyVideo,
+  setLastFetchDate,
 } from '../services/storage';
-import { isVideoCached, downloadVideo } from '../services/downloader';
 import { computeNextAlarm } from '../utils/nextAlarm';
-import { DailyVideoMetadata } from '../constants/types';
 
 /** Don't hit the API until we're this close to the next alarm. */
-const PREFETCH_WINDOW_MS = 10 * 60 * 1000;
+const PREFETCH_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 interface UseDailyVideoResult {
   video: DailyVideoMetadata | null;
   isLoading: boolean;
-  isDownloading: boolean;
-  downloadProgress: number;
   error: string | null;
   refresh: () => Promise<void>;
-  triggerDownload: () => Promise<void>;
 }
 
 /**
@@ -33,17 +33,18 @@ interface UseDailyVideoResult {
  *   the exact moment the window opens.
  */
 export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
+  console.log('[useDailyVideo] render', { deviceId });   // top of function body
   const [video, setVideo] = useState<DailyVideoMetadata | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const loadVideo = useCallback(async () => {
+    console.log('[useDailyVideo] loadVideo CALLED', { deviceId });   // first line of loadVideo
+    await AsyncStorage.removeItem(STORAGE_KEYS.LAST_FETCH_DATE);
+
     if (!deviceId) return;
     setIsLoading(true);
     setError(null);
-
     try {
       const today = getTodayDateString();
       const lastFetch = await getLastFetchDate();
@@ -56,6 +57,11 @@ export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
         // Only hit the API if we're within the prefetch window of the next alarm.
         const alarms = await getAlarms();
         const next = computeNextAlarm(alarms, new Date());
+        console.log('[useDailyVideo] window check', {
+          alarmCount: alarms.length,
+          next: next ? { msUntil: next.msUntil, alarmId: next.alarm.id } : null,
+          withinWindow: !!(next && next.msUntil <= PREFETCH_WINDOW_MS),
+        });
         if (next && next.msUntil <= PREFETCH_WINDOW_MS) {
           metadata = await fetchDailyVideo(deviceId);
           await setDailyVideo(metadata);
@@ -81,24 +87,6 @@ export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
     }
   }, [deviceId]);
 
-  const triggerDownload = useCallback(async () => {
-    if (!video || isDownloading) return;
-    if (video.localPath) return; // Already downloaded
-
-    setIsDownloading(true);
-    setDownloadProgress(0);
-    setError(null);
-
-    try {
-      const localPath = await downloadVideo(video.videoId, video.videoUrl, setDownloadProgress);
-      setVideo((prev) => (prev ? { ...prev, localPath } : prev));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
-    } finally {
-      setIsDownloading(false);
-    }
-  }, [video, isDownloading]);
-
   const refresh = useCallback(async () => {
     if (!deviceId) return;
     // Force a new fetch by clearing the last fetch date
@@ -107,6 +95,7 @@ export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
   }, [deviceId, loadVideo]);
 
   useEffect(() => {
+    console.log('[useDailyVideo] effect FIRED', { deviceId });   // first line of effect
     loadVideo();
   }, [loadVideo]);
 
@@ -134,5 +123,5 @@ export function useDailyVideo(deviceId: string | null): UseDailyVideoResult {
     };
   }, [video, loadVideo]);
 
-  return { video, isLoading, isDownloading, downloadProgress, error, refresh, triggerDownload };
+  return { video, isLoading, error, refresh };
 }
