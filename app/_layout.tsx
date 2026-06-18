@@ -32,11 +32,13 @@ SplashScreen.preventAutoHideAsync();
 // Configure how notifications appear while the app is in the foreground (native only).
 // We suppress the banner because the notification received listener navigates directly
 // to the video player — no tap required when the app is open.
+// shouldShowList is also temporarily false so no entry appears in the notification
+// center while the video plays; flip back to true to restore.
 if (Platform.OS !== 'web') {
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: false,
-      shouldShowList: true,
+      shouldShowList: false,
       shouldPlaySound: false,
       shouldSetBadge: false,
     }),

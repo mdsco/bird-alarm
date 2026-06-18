@@ -46,4 +46,3 @@ backend/.aws-sam/
 
 # generated native folders
 /ios
-/android
